@@ -6,7 +6,8 @@ import App from './App.jsx'
 
 // Set Axios Base URL for Netlify / Render deployment
 if (import.meta.env.VITE_API_URL) {
-  axios.defaults.baseURL = import.meta.env.VITE_API_URL;
+  const cleanUrl = String(import.meta.env.VITE_API_URL).trim().replace(/\/+$/, '');
+  axios.defaults.baseURL = cleanUrl;
 }
 
 createRoot(document.getElementById('root')).render(
