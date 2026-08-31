@@ -80,6 +80,10 @@ export default function IpoDashboard({ isEmbedded = false }) {
   // Confirmation modal state before unchecking Allotted
   const [unallotConfirmModal, setUnallotConfirmModal] = useState(null);
 
+  // Confirmation modal state before deleting a Person / Demat Account column
+  const [deletePersonConfirmModal, setDeletePersonConfirmModal] = useState(null);
+
+
   // Inline editing state
   const [editingProfitLossId, setEditingProfitLossId] = useState(null);
   const [profitLossInput, setProfitLossInput] = useState('');
@@ -177,13 +181,14 @@ export default function IpoDashboard({ isEmbedded = false }) {
         setIsAddIpoOpen(false);
         setIsAddPersonOpen(false);
         setUnallotConfirmModal(null);
+        setDeletePersonConfirmModal(null);
       }
     };
-    if (isAddIpoOpen || isAddPersonOpen || unallotConfirmModal) {
+    if (isAddIpoOpen || isAddPersonOpen || unallotConfirmModal || deletePersonConfirmModal) {
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isAddIpoOpen, isAddPersonOpen, unallotConfirmModal]);
+  }, [isAddIpoOpen, isAddPersonOpen, unallotConfirmModal, deletePersonConfirmModal]);
 
   // Sync Person List across all local IPOs
   const ensurePersonAcrossIpos = (personName) => {
@@ -219,6 +224,66 @@ export default function IpoDashboard({ isEmbedded = false }) {
     setNewPersonName('');
     setIsAddPersonOpen(false);
   };
+
+  // Prompt confirmation dialog before deleting a Person / Demat Account column
+  const handlePromptDeletePerson = (personName) => {
+    let totalApps = 0;
+    let allottedCount = 0;
+    ipos.forEach((ipo) => {
+      (ipo.applications || []).forEach((app) => {
+        if (isSamePerson(app.personName, personName)) {
+          if (app.applied) totalApps += 1;
+          if (app.allotted) allottedCount += 1;
+        }
+      });
+    });
+
+    setDeletePersonConfirmModal({
+      personName,
+      totalApps,
+      allottedCount
+    });
+  };
+
+  // Confirm and execute Person / Demat Account deletion
+  const handleConfirmDeletePerson = async () => {
+    if (!deletePersonConfirmModal?.personName) return;
+    const targetPerson = deletePersonConfirmModal.personName;
+    const prevPersons = [...persons];
+    const prevIpos = [...ipos];
+
+    // 1. Optimistic removal from state & localStorage
+    const updatedPersons = persons.filter((p) => !isSamePerson(p, targetPerson));
+    setPersons(updatedPersons);
+    try {
+      localStorage.setItem('antaryudh_demat_persons', JSON.stringify(updatedPersons));
+    } catch {}
+
+    setIpos((prev) =>
+      prev.map((ipo) => ({
+        ...ipo,
+        applications: (ipo.applications || []).filter(
+          (app) => !isSamePerson(app.personName, targetPerson)
+        )
+      }))
+    );
+    setDeletePersonConfirmModal(null);
+
+    // 2. Guaranteed backend database delete
+    try {
+      await axios.delete(`${API_BASE}/person/${encodeURIComponent(targetPerson)}`);
+    } catch (err) {
+      console.error('Failed to delete person on backend:', err);
+      // Rollback on failure
+      setPersons(prevPersons);
+      setIpos(prevIpos);
+      try {
+        localStorage.setItem('antaryudh_demat_persons', JSON.stringify(prevPersons));
+      } catch {}
+      setErrorMsg(`Failed to delete person "${targetPerson}" from server.`);
+    }
+  };
+
 
   // Toggle Applied or Allotted status with optimistic UI update and Backend Sync
   const handleToggleApplication = async (ipoId, personName, field) => {
@@ -830,6 +895,42 @@ export default function IpoDashboard({ isEmbedded = false }) {
           </div>
         </div>
 
+        {/* Registered Demat Accounts Pills Bar (Quick View & Delete) */}
+        {persons.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto py-1 px-1 text-xs scrollbar-none flex-wrap bg-slate-900/40 p-2 rounded-xl border border-slate-800/80">
+            <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0 mr-1">
+              <Users className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Demat Accounts ({persons.length}):</span>
+            </span>
+            {persons.map((p) => (
+              <span
+                key={p}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 text-xs font-medium hover:border-slate-700 transition group/tag shadow-sm"
+              >
+                <span className="truncate max-w-[120px]">{p}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePromptDeletePerson(p);
+                  }}
+                  className="text-slate-500 hover:text-rose-400 transition p-0.5 rounded hover:bg-rose-500/10 active:scale-90"
+                  title={`Remove ${p} account`}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            <button
+              onClick={() => setIsAddPersonOpen(true)}
+              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 hover:bg-cyan-900/40 border border-cyan-500/30 rounded-lg transition"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add</span>
+            </button>
+          </div>
+        )}
+
         {/* Dynamic Column Alert if no persons added yet */}
         {persons.length === 0 && (
           <div className="p-4 bg-indigo-950/30 border border-indigo-500/20 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
@@ -844,6 +945,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
             </button>
           </div>
         )}
+
 
         {/* 1. Mobile Cards & Dropdown View (Toggleable on small screens) */}
         {viewMode === 'cards' && (
@@ -1221,12 +1323,23 @@ export default function IpoDashboard({ isEmbedded = false }) {
                     {persons.map((person) => (
                       <th
                         key={person}
-                        className="py-2.5 px-2 min-w-[150px] max-w-[180px] border-r border-slate-800/80 bg-slate-950 text-center"
+                        className="py-2.5 px-2 min-w-[150px] max-w-[180px] border-r border-slate-800/80 bg-slate-950 text-center relative group/th"
                       >
-                        <div className="flex items-center justify-center mb-0.5">
-                          <span className="text-slate-200 font-medium truncate max-w-[140px]" title={person}>
+                        <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                          <span className="text-slate-200 font-medium truncate max-w-[110px]" title={person}>
                             {person}
                           </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePromptDeletePerson(person);
+                            }}
+                            className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition opacity-60 group-hover/th:opacity-100 active:scale-90"
+                            title={`Remove person / account "${person}"`}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         </div>
                         <div className="grid grid-cols-2 gap-1 text-[9px] text-slate-400 font-normal border-t border-slate-800/60 pt-0.5">
                           <span className="text-indigo-300 font-medium">Applied</span>
@@ -1234,6 +1347,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                         </div>
                       </th>
                     ))}
+
 
                     {/* Right Column: Profit / Loss & Percentage */}
                     <th className="py-3 px-3 sm:px-4 min-w-[140px] text-right bg-slate-950 sticky right-0 z-20 border-l border-slate-800 shadow-[-2px_0_5px_rgba(0,0,0,0.3)]">
@@ -1605,16 +1719,16 @@ export default function IpoDashboard({ isEmbedded = false }) {
       {isAddPersonOpen && typeof document !== 'undefined' && createPortal(
         <div 
           onClick={() => setIsAddPersonOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 animate-slideDown"
+            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 animate-slideDown max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-base font-bold text-white">Add New Person / Account</h3>
+                <h3 className="text-base font-bold text-white">Manage Demat Accounts</h3>
               </div>
               <button
                 type="button"
@@ -1628,42 +1742,90 @@ export default function IpoDashboard({ isEmbedded = false }) {
             <form onSubmit={handleAddPerson} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Person / Account Name *
+                  New Person / Account Name *
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Self, Account 2, Brother, etc."
-                  value={newPersonName}
-                  onChange={(e) => setNewPersonName(e.target.value)}
-                  autoFocus
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Self, Account 2, Brother, etc."
+                    value={newPersonName}
+                    onChange={(e) => setNewPersonName(e.target.value)}
+                    autoFocus
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition shrink-0"
+                  >
+                    Add
+                  </button>
+                </div>
                 <p className="text-[11px] text-slate-500 mt-1">
                   Adds a dynamic column for tracking applications and allotment status.
                 </p>
               </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsAddPersonOpen(false)}
-                  className="px-4 py-2 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition"
-                >
-                  Add Person Column
-                </button>
-              </div>
             </form>
+
+            {/* Existing Accounts List */}
+            {persons.length > 0 && (
+              <div className="pt-3 border-t border-slate-800 space-y-2">
+                <label className="block text-xs font-semibold text-slate-400">
+                  Registered Accounts ({persons.length})
+                </label>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {persons.map((p) => {
+                    const appCount = ipos.reduce((count, ipo) => {
+                      const app = (ipo.applications || []).find((a) => isSamePerson(a.personName, p));
+                      return app?.applied ? count + 1 : count;
+                    }, 0);
+
+                    return (
+                      <div
+                        key={p}
+                        className="flex items-center justify-between px-3 py-2 bg-slate-950/80 rounded-xl border border-slate-800/80 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Users className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                          <span className="font-semibold text-slate-200 truncate">{p}</span>
+                          <span className="text-[10px] text-slate-500 shrink-0 font-mono">
+                            ({appCount} applied)
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddPersonOpen(false);
+                            handlePromptDeletePerson(p);
+                          }}
+                          className="text-slate-500 hover:text-rose-400 transition p-1 rounded hover:bg-rose-500/10 active:scale-90 flex items-center gap-1 text-[11px]"
+                          title={`Delete account "${p}"`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsAddPersonOpen(false)}
+                className="px-4 py-2 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>,
         document.body
       )}
+
 
       {/* Modal: Add New IPO Entry (Rendered in Body Portal for True Viewport Centering) */}
       {isAddIpoOpen && typeof document !== 'undefined' && createPortal(
@@ -1858,6 +2020,65 @@ export default function IpoDashboard({ isEmbedded = false }) {
         </div>,
         document.body
       )}
+
+      {/* Modal: Confirmation Dialog when Deleting a Person / Demat Account Column */}
+      {deletePersonConfirmModal && typeof document !== 'undefined' && createPortal(
+
+        <div 
+          onClick={() => setDeletePersonConfirmModal(null)}
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-900 border border-rose-500/30 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 animate-slideDown my-auto relative z-[100000]"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center shrink-0 text-rose-400">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-white">Remove Person / Account?</h3>
+                  <button
+                    type="button"
+                    onClick={() => setDeletePersonConfirmModal(null)}
+                    className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                  Are you sure you want to remove <span className="font-semibold text-rose-300 px-1.5 py-0.5 rounded bg-rose-950/40 border border-rose-500/30">{deletePersonConfirmModal.personName}</span>?
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  This will remove the column from all tables and delete its application history ({deletePersonConfirmModal.totalApps} applied, {deletePersonConfirmModal.allottedCount} allotted).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeletePersonConfirmModal(null)}
+                className="px-4 py-2 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeletePerson}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/30 transition flex items-center gap-1.5 active:scale-95"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Person</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
+
