@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   LayoutDashboard,
   TrendingUp,
-  Target,
+  BarChart2,
   CreditCard,
   ShoppingBag,
   ArrowUpRight,
@@ -14,7 +14,9 @@ import {
   Layers,
   ChevronRight,
   FileSpreadsheet,
-  Plus
+  Plus,
+  Zap,
+  Activity
 } from 'lucide-react';
 
 export default function MainDashboard({ onNavigateTab }) {
@@ -25,20 +27,37 @@ export default function MainDashboard({ onNavigateTab }) {
     totalApplied: 0,
     overallRoi: null
   });
+  const [cashflowStats, setCashflowStats] = useState({
+    totalExpense: 0,
+    totalIncome: 0,
+    netSavings: 0,
+    count: 0
+  });
+  const [tradingStats, setTradingStats] = useState({
+    stockPl: 0,
+    intradayPl: 0,
+    netPl: 0,
+    totalTrades: 0
+  });
   const [loading, setLoading] = useState(true);
 
-  // Fetch live IPO stats for the overview
+  // Fetch live stats for overview
   useEffect(() => {
     const fetchSummary = async () => {
       try {
-        const res = await axios.get('/api/ipos');
-        if (Array.isArray(res.data)) {
+        const [ipoRes, expRes, tradeRes] = await Promise.allSettled([
+          axios.get('/api/ipos'),
+          axios.get('/api/expenses'),
+          axios.get('/api/trades')
+        ]);
+
+        if (ipoRes.status === 'fulfilled' && Array.isArray(ipoRes.value.data)) {
           let pl = 0;
           let applied = 0;
           let allotted = 0;
           let invested = 0;
 
-          res.data.forEach((ipo) => {
+          ipoRes.value.data.forEach((ipo) => {
             const p = parseFloat(ipo.profitLoss) || 0;
             const lc = parseFloat(ipo.lotCost) || 0;
             pl += p;
@@ -62,21 +81,73 @@ export default function MainDashboard({ onNavigateTab }) {
           const roi = invested > 0 ? ((pl / invested) * 100).toFixed(1) : null;
 
           setIpoStats({
-            totalIpos: res.data.length,
+            totalIpos: ipoRes.value.data.length,
             totalProfitLoss: pl,
             totalAllotted: allotted,
             totalApplied: applied,
             overallRoi: roi
           });
         }
+
+        if (expRes.status === 'fulfilled' && Array.isArray(expRes.value.data)) {
+          let totExp = 0;
+          let totInc = 0;
+
+          expRes.value.data.forEach((t) => {
+            const amt = parseFloat(t.amount) || 0;
+            if (t.type === 'income') {
+              totInc += amt;
+            } else {
+              totExp += amt;
+            }
+          });
+
+          setCashflowStats({
+            totalExpense: totExp,
+            totalIncome: totInc,
+            netSavings: totInc - totExp,
+            count: expRes.value.data.length
+          });
+        }
+
+        if (tradeRes.status === 'fulfilled' && Array.isArray(tradeRes.value.data)) {
+          let sPl = 0;
+          let iPl = 0;
+
+          tradeRes.value.data.forEach((t) => {
+            const buyPrice = parseFloat(t.buyPrice) || 0;
+            const qty = parseInt(t.quantity, 10) || 0;
+            const charges = parseFloat(t.charges) || 0;
+            const isClosed = t.sellPrice !== null && t.sellPrice !== undefined && t.sellPrice !== '';
+
+            if (isClosed) {
+              const sellPrice = parseFloat(t.sellPrice) || 0;
+              const ret = (sellPrice * qty) - (buyPrice * qty) - charges;
+              if (t.tradeType === 'stock') {
+                sPl += ret;
+              } else {
+                iPl += ret;
+              }
+            }
+          });
+
+          setTradingStats({
+            stockPl: sPl,
+            intradayPl: iPl,
+            netPl: sPl + iPl,
+            totalTrades: tradeRes.value.data.length
+          });
+        }
       } catch (err) {
-        console.warn('Could not fetch IPO summary for dashboard:', err);
+        console.warn('Could not fetch summary for dashboard:', err);
       } finally {
         setLoading(false);
       }
     };
     fetchSummary();
   }, []);
+
+
 
   const formatCurrency = (val) => {
     return new Intl.NumberFormat('en-IN', {
@@ -85,6 +156,73 @@ export default function MainDashboard({ onNavigateTab }) {
       maximumFractionDigits: 0
     }).format(parseFloat(val) || 0);
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-fadeIn font-sans">
+        {/* Skeleton Hero Banner */}
+        <div className="relative overflow-hidden rounded-2xl bg-slate-900/80 border border-slate-800 p-6 sm:p-8 shadow-xl">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-3 w-full max-w-xl">
+              <div className="h-5 w-48 rounded-full animate-shimmer" />
+              <div className="h-8 w-72 rounded-xl animate-shimmer" />
+              <div className="h-4 w-full rounded-lg animate-shimmer" />
+            </div>
+            <div className="h-10 w-36 rounded-xl animate-shimmer shrink-0" />
+          </div>
+        </div>
+
+        {/* Skeleton Module Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((n) => (
+            <div
+              key={n}
+              className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 shadow-lg space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-10 h-10 rounded-xl animate-shimmer" />
+                <div className="w-16 h-5 rounded-full animate-shimmer" />
+              </div>
+              <div className="space-y-2">
+                <div className="h-4 w-28 rounded animate-shimmer" />
+                <div className="h-3 w-36 rounded animate-shimmer opacity-70" />
+              </div>
+              <div className="pt-2 border-t border-slate-800 space-y-2">
+                <div className="flex justify-between">
+                  <div className="h-3 w-16 rounded animate-shimmer opacity-60" />
+                  <div className="h-3 w-20 rounded animate-shimmer" />
+                </div>
+                <div className="flex justify-between">
+                  <div className="h-3 w-14 rounded animate-shimmer opacity-60" />
+                  <div className="h-3 w-16 rounded animate-shimmer" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Skeleton Deep Dive Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div className="h-5 w-48 rounded animate-shimmer mb-4" />
+            <div className="space-y-3">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="h-16 rounded-xl animate-shimmer" />
+              ))}
+            </div>
+          </div>
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div className="h-5 w-36 rounded animate-shimmer mb-4" />
+            <div className="space-y-3">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="h-10 rounded-xl animate-shimmer" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -158,37 +296,40 @@ export default function MainDashboard({ onNavigateTab }) {
           </div>
         </div>
 
-        {/* Card 2: Goal Milestones */}
+
+        {/* Card 2: Trading Journal */}
         <div
-          onClick={() => onNavigateTab('goal')}
-          className="bg-slate-900/90 border border-emerald-500/20 hover:border-emerald-500/50 rounded-2xl p-5 shadow-lg transition-all duration-300 cursor-pointer group hover:-translate-y-1 relative overflow-hidden"
+          onClick={() => onNavigateTab('trading')}
+          className="bg-slate-900/90 border border-indigo-500/20 hover:border-indigo-500/50 rounded-2xl p-5 shadow-lg transition-all duration-300 cursor-pointer group hover:-translate-y-1 relative overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
+          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition"></div>
           <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 group-hover:scale-110 transition">
-              <Target className="w-5 h-5" />
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 group-hover:scale-110 transition">
+              <BarChart2 className="w-5 h-5" />
             </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              Module
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+              Live Journal
             </span>
           </div>
 
-          <h3 className="text-sm font-bold text-white mb-1">Financial Goals</h3>
-          <p className="text-xs text-slate-400 mb-3">Milestones & Target Corpus</p>
+          <h3 className="text-sm font-bold text-white mb-1">Trading Journal</h3>
+          <p className="text-xs text-slate-400 mb-3">Stocks & Intraday P/L</p>
 
           <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Active Targets</span>
-              <span className="font-mono font-semibold text-emerald-400">4 Goals</span>
+              <span className="text-slate-400">Net Trading P/L</span>
+              <span className={`font-mono font-bold ${tradingStats.netPl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {tradingStats.netPl > 0 ? '+' : ''}{formatCurrency(tradingStats.netPl)}
+              </span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Overall Progress</span>
-              <span className="font-mono font-semibold text-slate-200">68% Achieved</span>
+              <span className="text-slate-400">Total Setups</span>
+              <span className="font-mono font-semibold text-slate-200">{tradingStats.totalTrades} Logged</span>
             </div>
           </div>
 
-          <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-emerald-400 group-hover:text-emerald-300">
-            <span>View Goals Hub</span>
+          <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-indigo-400 group-hover:text-indigo-300">
+            <span>Open Trading Journal</span>
             <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
           </div>
         </div>
@@ -204,26 +345,30 @@ export default function MainDashboard({ onNavigateTab }) {
               <CreditCard className="w-5 h-5" />
             </div>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
-              Module
+              Live Ledger
             </span>
           </div>
 
-          <h3 className="text-sm font-bold text-white mb-1">Expenses & Flow</h3>
-          <p className="text-xs text-slate-400 mb-3">Monthly Outflow & Budgets</p>
+          <h3 className="text-sm font-bold text-white mb-1">Cashflow & Expenses</h3>
+          <p className="text-xs text-slate-400 mb-3">Two-way income & expense ledger</p>
 
           <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Monthly Budget</span>
-              <span className="font-mono font-semibold text-slate-200">₹65,000 / mo</span>
+              <span className="text-slate-400">Total Spent</span>
+              <span className="font-mono font-bold text-rose-400">
+                -{formatCurrency(cashflowStats.totalExpense)}
+              </span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Budget Health</span>
-              <span className="font-mono font-semibold text-emerald-400">Within Limit</span>
+              <span className="text-slate-400">Total Inflow</span>
+              <span className="font-mono font-bold text-emerald-400">
+                +{formatCurrency(cashflowStats.totalIncome)}
+              </span>
             </div>
           </div>
 
           <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-rose-400 group-hover:text-rose-300">
-            <span>Manage Expenses</span>
+            <span>Open Cashflow Ledger</span>
             <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
           </div>
         </div>
@@ -275,7 +420,7 @@ export default function MainDashboard({ onNavigateTab }) {
                 AntarYudh Platform Modules Overview
               </h3>
             </div>
-            <span className="text-xs text-slate-400">Phase 1 Release</span>
+            <span className="text-xs text-slate-400">Core Release</span>
           </div>
 
           <div className="space-y-3">
@@ -295,19 +440,20 @@ export default function MainDashboard({ onNavigateTab }) {
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
-                <Target className="w-4 h-4" />
+              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
+                <BarChart2 className="w-4 h-4" />
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-white">Goals & Milestones Module</h4>
-                  <span className="text-[10px] text-teal-300 font-semibold bg-teal-500/10 px-2 py-0.5 rounded">Ready for Setup</span>
+                  <h4 className="text-xs font-bold text-white">Trading Journal Module (Stocks & Intraday)</h4>
+                  <span className="text-[10px] text-indigo-300 font-semibold bg-indigo-500/10 px-2 py-0.5 rounded">Active Live</span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Set target corpus amounts, retirement timelines, asset allocation milestones, and visualize progress bars toward financial freedom.
+                  Notion-style data grids for tracking Positional Stock Delivery and Intraday Momentum trades with automated Net P/L, Returns %, and decision filters (Eagle Eye, Telegram, Self).
                 </p>
               </div>
             </div>
+
 
             <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-start gap-3">
               <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400 shrink-0">

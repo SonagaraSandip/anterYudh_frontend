@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   TrendingUp,
-  Target,
+  BarChart2,
   CreditCard,
   ShoppingBag,
   Shield,
@@ -10,26 +10,32 @@ import {
   X,
   ChevronRight,
   ArrowUp,
-  Database
+  Database,
+  RefreshCw,
+  Zap
 } from 'lucide-react';
 import axios from 'axios';
 import MainDashboard from './components/MainDashboard';
 import IpoDashboard from './components/IpoDashboard';
-import GoalView from './components/GoalView';
+import TradingView from './components/TradingView';
 import ExpensesView from './components/ExpensesView';
 import BuyView from './components/BuyView';
+import ConnectingScreen from './components/ConnectingScreen';
 
 function App() {
   const getInitialTab = () => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '').toLowerCase();
-      if (['dashboard', 'ipo', 'goal', 'expenses', 'buy'].includes(hash)) {
+      if (['dashboard', 'ipo', 'trading', 'expenses', 'buy'].includes(hash)) {
         return hash;
       }
+      if (hash === 'goal') return 'trading';
+
       const saved = localStorage.getItem('antaryudh_active_tab');
-      if (['dashboard', 'ipo', 'goal', 'expenses', 'buy'].includes(saved)) {
+      if (['dashboard', 'ipo', 'trading', 'expenses', 'buy'].includes(saved)) {
         return saved;
       }
+      if (saved === 'goal') return 'trading';
     }
     return 'dashboard';
   };
@@ -38,19 +44,48 @@ function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [sysStatus, setSysStatus] = useState({ database: 'Connecting...', isProd: false, environment: 'development' });
+  
+  // Database Connecting Screen State
+  const [isConnectingDb, setIsConnectingDb] = useState(true);
+  const [connectionState, setConnectionState] = useState('connecting'); // 'connecting' | 'connected' | 'error'
 
-  // Fetch active Database Environment Status
-  useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await axios.get('/api/system/status');
-        if (res.data) setSysStatus(res.data);
-      } catch (err) {
-        console.warn('System status not reachable');
+  const checkDbConnection = async () => {
+    setConnectionState('connecting');
+    const startTime = Date.now();
+    try {
+      const res = await axios.get('/api/system/status');
+      if (res.data && (res.data.status === 'online' || res.data.connected)) {
+        setSysStatus(res.data);
+        
+        // Ensure the visual connecting sequence completes gracefully
+        const elapsed = Date.now() - startTime;
+        const remainingDelay = Math.max(0, 1400 - elapsed);
+        
+        setTimeout(() => {
+          setConnectionState('connected');
+          // Allow the 100% checkmark and success state to be viewed before entering
+          setTimeout(() => {
+            setIsConnectingDb(false);
+          }, 450);
+        }, remainingDelay);
+      } else {
+        throw new Error('Database not ready');
       }
-    };
-    fetchStatus();
+    } catch (err) {
+      console.warn('System status not reachable or DB error:', err);
+      // Wait at least 1.2s before displaying error to allow visual feedback
+      const elapsed = Date.now() - startTime;
+      const remainingDelay = Math.max(0, 1200 - elapsed);
+      setTimeout(() => {
+        setConnectionState('error');
+      }, remainingDelay);
+    }
+  };
+
+  useEffect(() => {
+    checkDbConnection();
   }, []);
+
 
   // Monitor window scroll position to toggle scroll-to-top button
   useEffect(() => {
@@ -98,22 +133,22 @@ function App() {
       glow: 'shadow-cyan-500/20'
     },
     {
-      id: 'goal',
-      label: 'Goal',
-      icon: Target,
-      badge: 'Progress',
-      badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-      color: 'emerald',
-      activeGradient: 'from-emerald-600 to-teal-600',
-      activeText: 'text-emerald-400',
-      activeBorder: 'border-emerald-500/40',
-      glow: 'shadow-emerald-500/20'
+      id: 'trading',
+      label: 'Trading',
+      icon: BarChart2,
+      badge: 'Journal',
+      badgeColor: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20',
+      color: 'indigo',
+      activeGradient: 'from-blue-600 to-indigo-600',
+      activeText: 'text-indigo-300',
+      activeBorder: 'border-indigo-500/40',
+      glow: 'shadow-indigo-500/20'
     },
     {
       id: 'expenses',
       label: 'Expenses',
       icon: CreditCard,
-      badge: 'Progress',
+      badge: 'Live',
       badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
       color: 'rose',
       activeGradient: 'from-rose-600 to-orange-600',
@@ -135,6 +170,7 @@ function App() {
     }
   ];
 
+
   const handleSelectTab = (tabId) => {
     setActiveTab(tabId);
     if (typeof window !== 'undefined') {
@@ -145,9 +181,21 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-indigo-500 selection:text-white">
-      {/* Master Top Navigation Bar */}
-      <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur-xl sticky top-0 z-40 px-3 sm:px-6 py-2.5 transition-all">
+    <>
+      {/* Database Connection Initializer Screen */}
+      {isConnectingDb && (
+        <ConnectingScreen
+          connectionState={connectionState}
+          sysStatus={sysStatus}
+          onRetry={checkDbConnection}
+          onBypass={() => setIsConnectingDb(false)}
+        />
+      )}
+
+      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-indigo-500 selection:text-white">
+        {/* Master Top Navigation Bar */}
+        <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur-xl sticky top-0 z-40 px-3 sm:px-6 py-2.5 transition-all">
+
         <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-3 sm:gap-4">
           
           {/* Brand Logo & Tagline */}
@@ -287,10 +335,11 @@ function App() {
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-6">
         {activeTab === 'dashboard' && <MainDashboard onNavigateTab={(tab) => handleSelectTab(tab)} />}
         {activeTab === 'ipo' && <IpoDashboard isEmbedded={true} />}
-        {activeTab === 'goal' && <GoalView />}
+        {activeTab === 'trading' && <TradingView />}
         {activeTab === 'expenses' && <ExpensesView />}
         {activeTab === 'buy' && <BuyView />}
       </main>
+
 
       {/* Modern Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 sm:px-6 text-center text-xs text-slate-500">
@@ -323,6 +372,7 @@ function App() {
         <ArrowUp className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform duration-200" />
       </button>
     </div>
+    </>
   );
 }
 

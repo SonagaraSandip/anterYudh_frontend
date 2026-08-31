@@ -19,9 +19,12 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   LayoutGrid,
   Smartphone,
-  Calendar
+  Calendar,
+  Users
 } from 'lucide-react';
 
 const API_BASE = '/api/ipos';
@@ -45,6 +48,29 @@ export default function IpoDashboard({ isEmbedded = false }) {
     return 10; // Web default max 10 entries
   });
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Mobile accordion / collapsible dropdown state for IPO cards
+  const [expandedIpoIds, setExpandedIpoIds] = useState(new Set());
+
+  const toggleIpoExpand = (id) => {
+    setExpandedIpoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const expandAllIpos = () => {
+    setExpandedIpoIds(new Set(paginatedIpos.map((i) => i.id)));
+  };
+
+  const collapseAllIpos = () => {
+    setExpandedIpoIds(new Set());
+  };
 
   // Modals & form state
   const [isAddIpoOpen, setIsAddIpoOpen] = useState(false);
@@ -638,102 +664,118 @@ export default function IpoDashboard({ isEmbedded = false }) {
           </div>
         )}
 
-        {/* Top Summary Metrics Cards (Vibrant Color Coding) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm relative overflow-hidden group hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1">
-              <span>Total Realized P&L</span>
-              <div className={`p-1 sm:p-1.5 rounded-lg ${stats.totalProfitLoss >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                {stats.totalProfitLoss >= 0 ? <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+        {/* Top Summary Metrics Cards (Vibrant Color Coding or Loading Skeleton) */}
+        {loading && ipos.length === 0 ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="h-3 w-20 rounded animate-shimmer" />
+                  <div className="w-7 h-7 rounded-lg animate-shimmer" />
+                </div>
+                <div className="h-7 w-28 rounded animate-shimmer" />
+                <div className="h-2.5 w-16 rounded animate-shimmer opacity-70" />
               </div>
-            </div>
-            <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight ${stats.totalProfitLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {stats.totalProfitLoss > 0 ? '+' : ''}
-              {formatCurrency(stats.totalProfitLoss)}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1">
-              {stats.overallProfitPercent !== null ? (
-                <span className={`text-[10px] sm:text-[11px] font-semibold px-1.5 py-0.5 rounded ${
-                  parseFloat(stats.overallProfitPercent) >= 0
-                    ? 'bg-emerald-500/10 text-emerald-400'
-                    : 'bg-rose-500/10 text-rose-400'
-                }`}>
-                  {parseFloat(stats.overallProfitPercent) > 0 ? '+' : ''}{stats.overallProfitPercent}% Overall ROI
-                </span>
-              ) : (
-                <span className="text-[10px] sm:text-[11px] text-slate-500">Across all entries</span>
-              )}
-            </div>
+            ))}
           </div>
-
-          <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm relative overflow-hidden group hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1">
-              <span>Overall Profit % (ROI)</span>
-              <div className={`p-1 sm:p-1.5 rounded-lg ${
-                stats.overallProfitPercent !== null && parseFloat(stats.overallProfitPercent) >= 0
-                  ? 'bg-emerald-500/10 text-emerald-400'
-                  : stats.overallProfitPercent !== null && parseFloat(stats.overallProfitPercent) < 0
-                  ? 'bg-rose-500/10 text-rose-400'
-                  : 'bg-indigo-500/10 text-indigo-400'
-              }`}>
-                {stats.overallProfitPercent !== null && parseFloat(stats.overallProfitPercent) >= 0 ? (
-                  <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm relative overflow-hidden group hover:border-slate-700 transition">
+              <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1">
+                <span>Total Realized P&L</span>
+                <div className={`p-1 sm:p-1.5 rounded-lg ${stats.totalProfitLoss >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                  {stats.totalProfitLoss >= 0 ? <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                </div>
+              </div>
+              <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight ${stats.totalProfitLoss >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {stats.totalProfitLoss > 0 ? '+' : ''}
+                {formatCurrency(stats.totalProfitLoss)}
+              </div>
+              <div className="flex items-center gap-1.5 mt-1">
+                {stats.overallProfitPercent !== null ? (
+                  <span className={`text-[10px] sm:text-[11px] font-semibold px-1.5 py-0.5 rounded ${
+                    parseFloat(stats.overallProfitPercent) >= 0
+                      ? 'bg-emerald-500/10 text-emerald-400'
+                      : 'bg-rose-500/10 text-rose-400'
+                  }`}>
+                    {parseFloat(stats.overallProfitPercent) > 0 ? '+' : ''}{stats.overallProfitPercent}% Overall ROI
+                  </span>
                 ) : (
-                  <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="text-[10px] sm:text-[11px] text-slate-500">Across all entries</span>
                 )}
               </div>
             </div>
-            <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight ${
-              stats.overallProfitPercent !== null
-                ? parseFloat(stats.overallProfitPercent) >= 0
-                  ? 'text-emerald-400'
-                  : 'text-rose-400'
-                : 'text-slate-300'
-            }`}>
-              {stats.overallProfitPercent !== null ? (
-                <>
-                  {parseFloat(stats.overallProfitPercent) > 0 ? '+' : ''}
-                  {stats.overallProfitPercent}%
-                </>
-              ) : (
-                '0.0%'
-              )}
-            </div>
-            <span className="text-[10px] sm:text-[11px] text-slate-500">
-              {stats.totalInvestedCost > 0
-                ? `On ${formatCurrency(stats.totalInvestedCost)} capital`
-                : 'Based on Lot Cost'}
-            </span>
-          </div>
 
-          <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm relative overflow-hidden group hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1">
-              <span>Allotment Rate</span>
-              <div className="p-1 sm:p-1.5 rounded-lg bg-violet-500/10 text-violet-400">
-                <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm relative overflow-hidden group hover:border-slate-700 transition">
+              <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1">
+                <span>Overall Profit % (ROI)</span>
+                <div className={`p-1 sm:p-1.5 rounded-lg ${
+                  stats.overallProfitPercent !== null && parseFloat(stats.overallProfitPercent) >= 0
+                    ? 'bg-emerald-500/10 text-emerald-400'
+                    : stats.overallProfitPercent !== null && parseFloat(stats.overallProfitPercent) < 0
+                    ? 'bg-rose-500/10 text-rose-400'
+                    : 'bg-indigo-500/10 text-indigo-400'
+                }`}>
+                  {stats.overallProfitPercent !== null && parseFloat(stats.overallProfitPercent) >= 0 ? (
+                    <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  ) : (
+                    <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  )}
+                </div>
               </div>
+              <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight ${
+                stats.overallProfitPercent !== null
+                  ? parseFloat(stats.overallProfitPercent) >= 0
+                    ? 'text-emerald-400'
+                    : 'text-rose-400'
+                  : 'text-slate-300'
+              }`}>
+                {stats.overallProfitPercent !== null ? (
+                  <>
+                    {parseFloat(stats.overallProfitPercent) > 0 ? '+' : ''}
+                    {stats.overallProfitPercent}%
+                  </>
+                ) : (
+                  '0.0%'
+                )}
+              </div>
+              <span className="text-[10px] sm:text-[11px] text-slate-500">
+                {stats.totalInvestedCost > 0
+                  ? `On ${formatCurrency(stats.totalInvestedCost)} capital`
+                  : 'Based on Lot Cost'}
+              </span>
             </div>
-            <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-violet-400">
-              {stats.allotmentRate}%
-            </div>
-            <span className="text-[10px] sm:text-[11px] text-slate-500">
-              {stats.totalAllottedCount} allotted / {stats.totalAppliedCount} applied
-            </span>
-          </div>
 
-          <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm relative overflow-hidden group hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1">
-              <span>IPOs / Demats</span>
-              <div className="p-1 sm:p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
-                <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm relative overflow-hidden group hover:border-slate-700 transition">
+              <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1">
+                <span>Allotment Rate</span>
+                <div className="p-1 sm:p-1.5 rounded-lg bg-violet-500/10 text-violet-400">
+                  <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </div>
               </div>
+              <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-violet-400">
+                {stats.allotmentRate}%
+              </div>
+              <span className="text-[10px] sm:text-[11px] text-slate-500">
+                {stats.totalAllottedCount} allotted / {stats.totalAppliedCount} applied
+              </span>
             </div>
-            <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-white">
-              {ipos.length} <span className="text-xs sm:text-sm font-normal text-slate-400">IPOs / {persons.length} Demats</span>
+
+            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm relative overflow-hidden group hover:border-slate-700 transition">
+              <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1">
+                <span>IPOs / Demats</span>
+                <div className="p-1 sm:p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
+                  <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-white">
+                {ipos.length} <span className="text-xs sm:text-sm font-normal text-slate-400">IPOs / {persons.length} Demats</span>
+              </div>
+              <span className="text-[10px] sm:text-[11px] text-slate-500">Synced to Database</span>
             </div>
-            <span className="text-[10px] sm:text-[11px] text-slate-500">Synced to Database</span>
           </div>
-        </div>
+        )}
+
 
         {/* Toolbar: Search, Filters */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-900/60 p-2.5 sm:p-3 rounded-xl border border-slate-800">
@@ -803,10 +845,61 @@ export default function IpoDashboard({ isEmbedded = false }) {
           </div>
         )}
 
-        {/* 1. Mobile Cards View (Toggleable on small screens) */}
+        {/* 1. Mobile Cards & Dropdown View (Toggleable on small screens) */}
         {viewMode === 'cards' && (
           <div className="block md:hidden space-y-3">
-            {filteredIpos.length === 0 ? (
+            {/* Mobile Header Bar with Expand/Collapse All */}
+            {paginatedIpos.length > 0 && (
+              <div className="flex items-center justify-between px-1 py-0.5">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Smartphone className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>IPOs ({filteredIpos.length})</span>
+                </span>
+                <button
+                  onClick={() => {
+                    const allExpanded = paginatedIpos.every((i) => expandedIpoIds.has(i.id));
+                    if (allExpanded) {
+                      collapseAllIpos();
+                    } else {
+                      expandAllIpos();
+                    }
+                  }}
+                  className="text-[11px] font-medium text-cyan-400 hover:text-cyan-300 px-2.5 py-1 rounded-lg bg-cyan-950/40 border border-cyan-500/30 transition active:scale-95 flex items-center gap-1"
+                >
+                  {paginatedIpos.every((i) => expandedIpoIds.has(i.id)) ? (
+                    <>
+                      <ChevronUp className="w-3.5 h-3.5" />
+                      <span>Collapse All</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      <span>Expand All</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {loading && ipos.length === 0 ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4].map((n) => (
+                  <div key={n} className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-lg space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-2 flex-1">
+                        <div className="h-4 w-40 rounded animate-shimmer" />
+                        <div className="h-3 w-24 rounded animate-shimmer opacity-70" />
+                      </div>
+                      <div className="h-6 w-16 rounded-lg animate-shimmer" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+                      <div className="h-8 rounded-lg animate-shimmer" />
+                      <div className="h-8 rounded-lg animate-shimmer" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredIpos.length === 0 ? (
               <div className="py-12 text-center text-slate-500 bg-slate-900/60 rounded-xl border border-slate-800">
                 <FileSpreadsheet className="w-8 h-8 mx-auto text-slate-600 mb-2" />
                 <p className="text-sm">No IPO entries found.</p>
@@ -818,19 +911,38 @@ export default function IpoDashboard({ isEmbedded = false }) {
                 </button>
               </div>
             ) : (
+
               paginatedIpos.map((ipo) => {
                 const pl = parseFloat(ipo.profitLoss) || 0;
                 const lc = parseFloat(ipo.lotCost) || 0;
                 const ipoPercent = calculateIpoPercentage(ipo);
+                const isExpanded = expandedIpoIds.has(ipo.id);
+
+                const appliedCount = (ipo.applications || []).filter((a) => a.applied).length;
+                const allottedCount = (ipo.applications || []).filter((a) => a.allotted).length;
+                const totalDematCount = persons.length;
 
                 return (
-                  <div key={ipo.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-lg">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0 pr-2">
-                        <h3 className="font-semibold text-slate-100 text-sm truncate">{ipo.ipoName}</h3>
-                        
+                  <div
+                    key={ipo.id}
+                    className={`bg-slate-900 border rounded-xl p-3.5 shadow-lg transition-all duration-200 ${
+                      isExpanded ? 'border-cyan-500/40 ring-1 ring-cyan-500/20' : 'border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    {/* Header Row: IPO Name & P&L / Actions */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div
+                        className="flex-1 min-w-0 cursor-pointer"
+                        onClick={() => toggleIpoExpand(ipo.id)}
+                      >
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-bold text-slate-100 text-sm tracking-tight hover:text-cyan-300 transition-colors">
+                            {ipo.ipoName}
+                          </h3>
+                        </div>
+
                         {/* Lot Cost & Creation Date with Mobile Edit */}
-                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
                           {editingLotCostId === ipo.id ? (
                             <div className="flex items-center gap-1">
                               <input
@@ -856,7 +968,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                           ) : (
                             <button
                               onClick={() => handleStartEditLotCost(ipo)}
-                              className="text-[11px] text-indigo-300 bg-indigo-950/50 hover:bg-indigo-900/50 border border-indigo-500/30 px-2 py-0.5 rounded font-mono flex items-center gap-1 transition"
+                              className="text-[10px] text-indigo-300 bg-indigo-950/50 hover:bg-indigo-900/50 border border-indigo-500/30 px-2 py-0.5 rounded font-mono flex items-center gap-1 transition"
                               title="Tap to edit Lot Cost"
                             >
                               <span>Lot: {lc > 0 ? formatCurrency(lc) : 'Set Cost'}</span>
@@ -874,7 +986,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
                         {ipo.notes && <p className="text-xs text-slate-400 mt-1 truncate">{ipo.notes}</p>}
                       </div>
 
-                      <div className="flex flex-col items-end gap-1 shrink-0">
+                      {/* Right Side: P&L Badge, Return %, Trash */}
+                      <div className="flex flex-col items-end gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1.5">
                           {editingProfitLossId === ipo.id ? (
                             <div className="flex items-center gap-1">
@@ -917,7 +1030,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
 
                           <button
                             onClick={() => handleDeleteIpo(ipo.id)}
-                            className="text-slate-500 hover:text-rose-400 p-1"
+                            className="text-slate-500 hover:text-rose-400 p-1 transition"
+                            title="Delete IPO"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -932,66 +1046,136 @@ export default function IpoDashboard({ isEmbedded = false }) {
                       </div>
                     </div>
 
-                    {/* Person Applications List in Card */}
-                    <div className="border-t border-slate-800/80 pt-2.5 space-y-2">
-                      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                        Person Applications
+                    {/* Collapsible Dropdown Trigger Bar */}
+                    <div
+                      onClick={() => toggleIpoExpand(ipo.id)}
+                      className={`mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between cursor-pointer group select-none transition-colors ${
+                        isExpanded ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Applied Count Badge */}
+                        <span
+                          className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1 transition ${
+                            appliedCount > 0
+                              ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                              : 'bg-slate-950 text-slate-500 border border-slate-800'
+                          }`}
+                        >
+                          <Users className="w-3 h-3 text-cyan-400" />
+                          <span>{appliedCount}/{totalDematCount} Applied</span>
+                        </span>
+
+                        {/* Allotted Badge if any */}
+                        {allottedCount > 0 && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            <span>{allottedCount} Allotted</span>
+                          </span>
+                        )}
                       </div>
-                      {persons.map((person) => {
-                        const app = (ipo.applications || []).find((a) => isSamePerson(a.personName, person)) || {
-                          applied: false,
-                          allotted: false,
-                          notes: ''
-                        };
-                        return (
-                          <div
-                            key={person}
-                            className={`p-2 rounded-lg border flex flex-col gap-1.5 ${
-                              app.allotted
-                                ? 'bg-emerald-950/20 border-emerald-500/30'
-                                : app.applied
-                                ? 'bg-indigo-950/20 border-indigo-500/30'
-                                : 'bg-slate-950/60 border-slate-800/80'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-medium text-slate-200">{person}</span>
-                              <div className="flex items-center gap-3">
-                                <label className="flex items-center gap-1 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(app.applied)}
-                                    onChange={() => handleToggleApplication(ipo.id, person, 'applied')}
-                                    className="w-3.5 h-3.5 rounded text-indigo-600 bg-slate-900 border-slate-700 accent-indigo-500"
-                                  />
-                                  <span className={app.applied ? 'text-indigo-300 font-semibold' : 'text-slate-500'}>
-                                    Applied
-                                  </span>
-                                </label>
-                                <label className="flex items-center gap-1 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(app.allotted)}
-                                    onChange={() => handleToggleAllottedWithConfirm(ipo, person, Boolean(app.allotted))}
-                                    className="w-3.5 h-3.5 rounded text-emerald-500 bg-slate-900 border-slate-700 accent-emerald-500"
-                                  />
-                                  <span className={app.allotted ? 'text-emerald-300 font-bold' : 'text-slate-500'}>
-                                    Allotted
-                                  </span>
-                                </label>
-                              </div>
-                            </div>
-                            <input
-                              type="text"
-                              placeholder="App # / Notes..."
-                              value={app.notes || ''}
-                              onChange={(e) => handleUpdatePersonNotes(ipo.id, person, e.target.value)}
-                              className="w-full px-2 py-1 text-[11px] bg-slate-900 border border-slate-800 rounded text-slate-300 focus:outline-none focus:border-indigo-500"
-                            />
-                          </div>
-                        );
-                      })}
+
+                      {/* Dropdown Toggle Button with animated chevron */}
+                      <div className="flex items-center gap-1 text-xs font-semibold text-cyan-400 group-hover:text-cyan-300">
+                        <span>{isExpanded ? 'Hide Demats' : 'Show Demats'}</span>
+                        <div
+                          className={`p-1 rounded-md bg-slate-800/80 border border-slate-700/60 transition-transform duration-200 ${
+                            isExpanded ? 'rotate-180 bg-cyan-950/60 text-cyan-400 border-cyan-500/30' : ''
+                          }`}
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Person Applications Dropdown / Accordion Body */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-cyan-500/20 space-y-2.5 animate-fadeIn">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-0.5">
+                          <span className="flex items-center gap-1 text-cyan-400">
+                            <Users className="w-3.5 h-3.5" />
+                            <span>Person Demat Accounts ({persons.length})</span>
+                          </span>
+                          <span className="text-[10px] font-normal text-slate-500 lowercase">
+                            tap checkbox to toggle
+                          </span>
+                        </div>
+
+                        {persons.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-slate-500 bg-slate-950/60 rounded-lg border border-slate-800">
+                            No demat accounts registered yet.
+                          </div>
+                        ) : (
+                          persons.map((person) => {
+                            const app = (ipo.applications || []).find((a) => isSamePerson(a.personName, person)) || {
+                              applied: false,
+                              allotted: false,
+                              notes: ''
+                            };
+                            return (
+                              <div
+                                key={person}
+                                className={`p-2.5 rounded-xl border flex flex-col gap-2 transition-all ${
+                                  app.allotted
+                                    ? 'bg-emerald-950/20 border-emerald-500/40 shadow-sm shadow-emerald-500/10'
+                                    : app.applied
+                                    ? 'bg-cyan-950/20 border-cyan-500/40'
+                                    : 'bg-slate-950/60 border-slate-800/80'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-slate-200">{person}</span>
+                                    {app.allotted ? (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                        Allotted
+                                      </span>
+                                    ) : app.applied ? (
+                                      <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                        Applied
+                                      </span>
+                                    ) : null}
+                                  </div>
+
+                                  <div className="flex items-center gap-3">
+                                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(app.applied)}
+                                        onChange={() => handleToggleApplication(ipo.id, person, 'applied')}
+                                        className="w-4 h-4 rounded text-cyan-600 bg-slate-900 border-slate-700 accent-cyan-500 cursor-pointer"
+                                      />
+                                      <span className={app.applied ? 'text-cyan-300 font-semibold text-xs' : 'text-slate-400 text-xs'}>
+                                        Applied
+                                      </span>
+                                    </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(app.allotted)}
+                                        onChange={() => handleToggleAllottedWithConfirm(ipo, person, Boolean(app.allotted))}
+                                        className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 accent-emerald-500 cursor-pointer"
+                                      />
+                                      <span className={app.allotted ? 'text-emerald-300 font-bold text-xs' : 'text-slate-400 text-xs'}>
+                                        Allotted
+                                      </span>
+                                    </label>
+                                  </div>
+                                </div>
+
+                                <input
+                                  type="text"
+                                  placeholder="App # / UPI / Demat notes..."
+                                  value={app.notes || ''}
+                                  onChange={(e) => handleUpdatePersonNotes(ipo.id, person, e.target.value)}
+                                  className="w-full px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded-lg text-slate-300 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-colors"
+                                />
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -1003,15 +1187,15 @@ export default function IpoDashboard({ isEmbedded = false }) {
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-200 border border-slate-700"
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-200 border border-slate-700 transition"
                 >
                   Prev
                 </button>
-                <span>Page {currentPage} of {totalPages}</span>
+                <span className="font-mono">Page {currentPage} of {totalPages}</span>
                 <button
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-200 border border-slate-700"
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-200 border border-slate-700 transition"
                 >
                   Next
                 </button>
@@ -1063,7 +1247,32 @@ export default function IpoDashboard({ isEmbedded = false }) {
 
                 {/* Table Body (Paginated: 5 per page) */}
                 <tbody className="divide-y divide-slate-800/60">
-                  {filteredIpos.length === 0 ? (
+                  {loading && ipos.length === 0 ? (
+                    [1, 2, 3, 4, 5].map((n) => (
+                      <tr key={n} className="hover:bg-slate-850/50">
+                        <td className="py-3 px-3 sm:px-4 sticky left-0 bg-slate-900 z-10 border-r border-slate-800/80">
+                          <div className="space-y-2">
+                            <div className="h-4 w-36 rounded animate-shimmer" />
+                            <div className="h-3 w-20 rounded animate-shimmer opacity-70" />
+                          </div>
+                        </td>
+                        {persons.map((p) => (
+                          <td key={p} className="py-3 px-2 border-r border-slate-800/80 text-center">
+                            <div className="flex justify-center gap-3">
+                              <div className="h-4 w-4 rounded animate-shimmer" />
+                              <div className="h-4 w-4 rounded animate-shimmer" />
+                            </div>
+                          </td>
+                        ))}
+                        <td className="py-3 px-3 sm:px-4 text-right sticky right-0 bg-slate-900 border-l border-slate-800">
+                          <div className="h-4 w-20 ml-auto rounded animate-shimmer" />
+                        </td>
+                        <td className="py-3 px-1.5 text-center">
+                          <div className="h-4 w-4 mx-auto rounded animate-shimmer opacity-40" />
+                        </td>
+                      </tr>
+                    ))
+                  ) : filteredIpos.length === 0 ? (
                     <tr>
                       <td
                         colSpan={3 + persons.length}
@@ -1082,6 +1291,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                       </td>
                     </tr>
                   ) : (
+
                     paginatedIpos.map((ipo) => {
                       const pl = parseFloat(ipo.profitLoss) || 0;
                       const lc = parseFloat(ipo.lotCost) || 0;
