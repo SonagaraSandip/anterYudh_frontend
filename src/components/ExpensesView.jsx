@@ -39,6 +39,8 @@ import {
   X
 } from 'lucide-react';
 
+import cacheManager from '../utils/cacheManager';
+
 const API_BASE = '/api/expenses';
 
 const PRESET_EXPENSE_CATEGORIES = [
@@ -73,17 +75,26 @@ const PRESET_INCOME_CATEGORIES = [
 
 const PAYMENT_MODES = [
   'UPI / GPay / PhonePe',
-  'Net Banking / NEFT',
   'Credit Card',
   'Debit Card',
+  'Net Banking',
   'Cash',
   'Demat / Broker Ledger',
   'Digital Wallet'
 ];
 
 export default function ExpensesView() {
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [transactions, setTransactions] = useState(() => {
+    const cached = cacheManager.get('cashflow_transactions');
+    if (Array.isArray(cached)) return cached;
+    try {
+      const stored = JSON.parse(localStorage.getItem('antaryudh_cashflow_data') || '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
   // Month navigation: format 'YYYY-MM' (e.g. '2026-08') or 'all'
@@ -119,24 +130,29 @@ export default function ExpensesView() {
   // Delete Confirm Modal
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  // Fetch Transactions from API
+  // Fetch Transactions from API (with SWR caching)
   const fetchTransactions = async () => {
-    setLoading(true);
+    if (transactions.length === 0) {
+      setLoading(true);
+    }
     setErrorMsg(null);
     try {
       const res = await axios.get(API_BASE);
       if (Array.isArray(res.data)) {
         setTransactions(res.data);
+        cacheManager.set('cashflow_transactions', res.data, 120000);
         localStorage.setItem('antaryudh_cashflow_data', JSON.stringify(res.data));
       }
     } catch (err) {
-      console.warn('Could not fetch from backend, loading local cache:', err);
-      try {
-        const cached = JSON.parse(localStorage.getItem('antaryudh_cashflow_data') || '[]');
-        setTransactions(cached);
-      } catch {
-        setTransactions([]);
-      }
+      console.warn('Could not fetch from backend, loading cache:', err);
+      const cached = cacheManager.get('cashflow_transactions', () => {
+        try {
+          return JSON.parse(localStorage.getItem('antaryudh_cashflow_data') || '[]');
+        } catch {
+          return [];
+        }
+      });
+      setTransactions(cached || []);
       setErrorMsg('Operating in local offline cache mode.');
     } finally {
       setLoading(false);

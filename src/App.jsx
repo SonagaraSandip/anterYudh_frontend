@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
   LayoutDashboard,
   TrendingUp,
@@ -12,28 +12,55 @@ import {
   ArrowUp,
   Database,
   RefreshCw,
-  Zap
+  Zap,
+  FileText,
+  Lock,
+  Loader2
 } from 'lucide-react';
 import axios from 'axios';
 import MainDashboard from './components/MainDashboard';
-import IpoDashboard from './components/IpoDashboard';
-import TradingView from './components/TradingView';
-import ExpensesView from './components/ExpensesView';
-import BuyView from './components/BuyView';
 import ConnectingScreen from './components/ConnectingScreen';
+
+// Lazy load heavyweight tab components so only Dashboard is loaded on initial render
+const IpoDashboard = lazy(() => import('./components/IpoDashboard'));
+const TradingView = lazy(() => import('./components/TradingView'));
+const ExpensesView = lazy(() => import('./components/ExpensesView'));
+const NotesView = lazy(() => import('./components/NotesView'));
+
+// Modern Sleek Fallback for lazy-loaded tabs
+function TabLoadingFallback() {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 px-4 space-y-4 animate-fadeIn">
+      <div className="relative flex items-center justify-center">
+        <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center animate-pulse">
+          <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+        </div>
+        <div className="absolute w-20 h-20 rounded-full border border-cyan-500/20 animate-ping pointer-events-none" />
+      </div>
+      <div className="text-center space-y-1">
+        <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight font-mono">
+          Loading Module Runtime...
+        </h4>
+        <p className="text-[11px] text-slate-400 font-medium">
+          Optimizing ledger components & secure encrypted state
+        </p>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const getInitialTab = () => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '').toLowerCase();
-      if (['dashboard', 'ipo', 'trading', 'expenses', 'buy'].includes(hash)) {
-        return hash;
+      if (['dashboard', 'ipo', 'trading', 'expenses', 'notes', 'buy'].includes(hash)) {
+        return hash === 'buy' ? 'notes' : hash;
       }
       if (hash === 'goal') return 'trading';
 
       const saved = localStorage.getItem('antaryudh_active_tab');
-      if (['dashboard', 'ipo', 'trading', 'expenses', 'buy'].includes(saved)) {
-        return saved;
+      if (['dashboard', 'ipo', 'trading', 'expenses', 'notes', 'buy'].includes(saved)) {
+        return saved === 'buy' ? 'notes' : saved;
       }
       if (saved === 'goal') return 'trading';
     }
@@ -45,37 +72,42 @@ function App() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [sysStatus, setSysStatus] = useState({ database: 'Connecting...', isProd: false, environment: 'development' });
   
-  // Database Connecting Screen State
-  const [isConnectingDb, setIsConnectingDb] = useState(true);
+  // Database Connecting Screen State (Skip on session refresh for instantaneous loading)
+  const [isConnectingDb, setIsConnectingDb] = useState(() => {
+    try {
+      return !sessionStorage.getItem('antaryudh_connected');
+    } catch {
+      return true;
+    }
+  });
   const [connectionState, setConnectionState] = useState('connecting'); // 'connecting' | 'connected' | 'error'
 
-  const checkDbConnection = async () => {
+  const checkDbConnection = async (isManualRetry = false) => {
     setConnectionState('connecting');
     const startTime = Date.now();
     try {
       const res = await axios.get('/api/system/status');
       if (res.data && (res.data.status === 'online' || res.data.connected)) {
         setSysStatus(res.data);
+        sessionStorage.setItem('antaryudh_connected', 'true');
         
-        // Ensure the visual connecting sequence completes gracefully
+        // Fast transition: non-blocking delay so user gets into dashboard in < 300ms!
         const elapsed = Date.now() - startTime;
-        const remainingDelay = Math.max(0, 1400 - elapsed);
+        const remainingDelay = isManualRetry ? Math.max(0, 300 - elapsed) : Math.max(0, 150 - elapsed);
         
         setTimeout(() => {
           setConnectionState('connected');
-          // Allow the 100% checkmark and success state to be viewed before entering
           setTimeout(() => {
             setIsConnectingDb(false);
-          }, 450);
+          }, 100);
         }, remainingDelay);
       } else {
         throw new Error('Database not ready');
       }
     } catch (err) {
       console.warn('System status not reachable or DB error:', err);
-      // Wait at least 1.2s before displaying error to allow visual feedback
       const elapsed = Date.now() - startTime;
-      const remainingDelay = Math.max(0, 1200 - elapsed);
+      const remainingDelay = Math.max(0, 400 - elapsed);
       setTimeout(() => {
         setConnectionState('error');
       }, remainingDelay);
@@ -85,7 +117,6 @@ function App() {
   useEffect(() => {
     checkDbConnection();
   }, []);
-
 
   // Monitor window scroll position to toggle scroll-to-top button
   useEffect(() => {
@@ -127,20 +158,20 @@ function App() {
       badge: 'Live',
       badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
       color: 'cyan',
-      activeGradient: 'from-blue-600 to-cyan-600',
+      activeGradient: 'from-cyan-600 to-blue-600',
       activeText: 'text-cyan-400',
       activeBorder: 'border-cyan-500/40',
       glow: 'shadow-cyan-500/20'
     },
     {
       id: 'trading',
-      label: 'Trading',
+      label: 'Trading Journal',
       icon: BarChart2,
-      badge: 'Journal',
-      badgeColor: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20',
+      badge: 'Pro',
+      badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
       color: 'indigo',
-      activeGradient: 'from-blue-600 to-indigo-600',
-      activeText: 'text-indigo-300',
+      activeGradient: 'from-indigo-600 to-cyan-600',
+      activeText: 'text-indigo-400',
       activeBorder: 'border-indigo-500/40',
       glow: 'shadow-indigo-500/20'
     },
@@ -157,19 +188,18 @@ function App() {
       glow: 'shadow-rose-500/20'
     },
     {
-      id: 'buy',
-      label: 'Buy',
-      icon: ShoppingBag,
-      badge: 'Progress',
-      badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-      color: 'amber',
-      activeGradient: 'from-amber-600 to-yellow-600',
-      activeText: 'text-amber-400',
-      activeBorder: 'border-amber-500/40',
-      glow: 'shadow-amber-500/20'
+      id: 'notes',
+      label: 'Notes',
+      icon: FileText,
+      badge: 'Vault',
+      badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+      color: 'indigo',
+      activeGradient: 'from-indigo-600 via-blue-600 to-cyan-600',
+      activeText: 'text-indigo-400',
+      activeBorder: 'border-indigo-500/40',
+      glow: 'shadow-indigo-500/20'
     }
   ];
-
 
   const handleSelectTab = (tabId) => {
     setActiveTab(tabId);
@@ -182,79 +212,62 @@ function App() {
 
   return (
     <>
-      {/* Database Connection Initializer Screen */}
+      {/* 0. Fullscreen Database Connecting Screen (Instant on session return) */}
       {isConnectingDb && (
         <ConnectingScreen
           connectionState={connectionState}
           sysStatus={sysStatus}
-          onRetry={checkDbConnection}
+          onRetry={() => checkDbConnection(true)}
           onBypass={() => setIsConnectingDb(false)}
         />
       )}
 
-      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-indigo-500 selection:text-white">
-        {/* Master Top Navigation Bar */}
-        <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur-xl sticky top-0 z-40 px-3 sm:px-6 py-2.5 transition-all">
-
-        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-3 sm:gap-4">
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+      {/* Top Navbar */}
+      <header className="sticky top-0 z-30 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
           
-          {/* Brand Logo & Tagline */}
-          <div 
-            onClick={() => handleSelectTab('dashboard')}
-            className="flex items-center gap-3 cursor-pointer group select-none"
-          >
-            <div className="p-2 sm:p-2.5 bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-500 rounded-xl shadow-lg shadow-indigo-500/25 text-white shrink-0 group-hover:scale-105 transition-transform duration-300">
-              <Shield className="w-5 h-5" />
+          {/* Logo & Brand */}
+          <div className="flex items-center gap-2 sm:gap-3 cursor-pointer" onClick={() => handleSelectTab('dashboard')}>
+            <div className="p-1.5 sm:p-2 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-500 shadow-md shadow-indigo-500/20 text-white">
+              <Shield className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-black tracking-tight text-white group-hover:text-indigo-300 transition">
+              <div className="flex items-center gap-1.5">
+                <span className="font-black text-sm sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
                   AntarYudh
-                </h1>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 font-bold border border-indigo-500/20">
+                </span>
+                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold uppercase">
                   Wealth OS
                 </span>
-                {/* Active Database Badge */}
-                <span 
-                  className={`text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded-full border flex items-center gap-1 font-bold ${
-                    sysStatus.isProd
-                      ? 'bg-emerald-950/80 text-emerald-400 border-emerald-500/40 shadow-sm shadow-emerald-500/20'
-                      : 'bg-amber-950/80 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-500/20'
-                  }`}
-                  title={`Connected to database: ${sysStatus.database}`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${sysStatus.isProd ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
-                  <span>{sysStatus.isProd ? 'PROD DB' : 'DEV DB'}: {sysStatus.database}</span>
-                </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium hidden sm:block">
-                Personal Wealth & Financial Command Center
-              </p>
+              <span className="text-[9px] sm:text-[10px] text-slate-400 tracking-wider hidden sm:block">
+                Unified Finance • Trading • Cashflow • Vault
+              </span>
             </div>
           </div>
 
-          {/* Desktop Navigation Tabs Switcher */}
-          <nav className="hidden md:flex items-center gap-1.5 p-1 bg-slate-950/80 rounded-xl border border-slate-800/90 shadow-inner">
+          {/* Desktop Navigation Tabs */}
+          <nav className="hidden md:flex items-center gap-1 bg-slate-950/60 p-1 rounded-2xl border border-slate-800/80 shadow-inner">
             {tabs.map((tab) => {
               const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
+              const isActive = activeTab === tab.id || (tab.id === 'notes' && activeTab === 'buy');
 
               return (
                 <button
                   key={tab.id}
                   onClick={() => handleSelectTab(tab.id)}
-                  className={`relative flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition-all duration-200 whitespace-nowrap select-none ${
+                  className={`relative px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 ${
                     isActive
                       ? `bg-gradient-to-r ${tab.activeGradient} text-white shadow-md ${tab.glow}`
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : ''}`} />
+                  <Icon className="w-3.5 h-3.5" />
                   <span>{tab.label}</span>
-
                   {tab.badge && (
                     <span
-                      className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${
+                      className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full border ${
                         isActive
                           ? 'bg-white/20 text-white border-white/30'
                           : tab.badgeColor
@@ -268,51 +281,58 @@ function App() {
             })}
           </nav>
 
-          {/* Mobile Hamburger Menu Button */}
-          <div className="flex md:hidden items-center gap-2">
+          {/* Right Header Status Bar & Mobile Menu Button */}
+          <div className="flex items-center gap-2">
+            {/* Live Database Sync Indicator */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] font-mono shadow-sm">
+              <span className="relative flex h-2 w-2">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${sysStatus.isProd ? 'bg-emerald-400' : 'bg-cyan-400'}`} />
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${sysStatus.isProd ? 'bg-emerald-500' : 'bg-cyan-500'}`} />
+              </span>
+              <span className="text-slate-400">DB:</span>
+              <span className={`font-bold ${sysStatus.isProd ? 'text-emerald-400' : 'text-amber-300'}`}>
+                {sysStatus.database}
+              </span>
+            </div>
+
+            {/* Mobile Hamburger Menu Toggle */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition active:scale-95 shadow-sm"
+              className="md:hidden p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition"
               aria-label="Toggle navigation menu"
             >
-              {isMobileMenuOpen ? (
-                <X className="w-5 h-5 text-indigo-400 transition-transform rotate-90 duration-200" />
-              ) : (
-                <Menu className="w-5 h-5 text-slate-200 transition-transform duration-200" />
-              )}
+              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
 
-        {/* Mobile Animated Dropdown Drawer Menu */}
+        {/* Mobile Dropdown Menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden mt-2.5 pt-2.5 border-t border-slate-800/80 animate-slideDown origin-top">
-            <div className="grid grid-cols-1 gap-1.5 p-1 bg-slate-950/90 backdrop-blur-xl rounded-xl border border-slate-800/90 shadow-2xl">
+          <div className="md:hidden bg-slate-900/95 backdrop-blur-xl border-b border-slate-800 px-3 py-3 animate-fadeIn">
+            <div className="grid grid-cols-1 gap-1.5">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
+                const isActive = activeTab === tab.id || (tab.id === 'notes' && activeTab === 'buy');
 
                 return (
                   <button
                     key={tab.id}
                     onClick={() => handleSelectTab(tab.id)}
-                    className={`flex items-center justify-between p-3 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-between ${
                       isActive
-                        ? `bg-gradient-to-r ${tab.activeGradient} text-white shadow-lg ${tab.glow}`
-                        : 'text-slate-300 hover:text-white hover:bg-slate-900/80'
+                        ? `bg-gradient-to-r ${tab.activeGradient} text-white shadow-md ${tab.glow}`
+                        : 'text-slate-300 hover:bg-slate-800/80'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-1.5 rounded-lg ${isActive ? 'bg-white/20' : 'bg-slate-800'}`}>
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <span className="text-sm font-medium">{tab.label}</span>
+                    <div className="flex items-center gap-2.5">
+                      <Icon className="w-4 h-4" />
+                      <span>{tab.label}</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       {tab.badge && (
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                          className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full border ${
                             isActive
                               ? 'bg-white/20 text-white border-white/30'
                               : tab.badgeColor
@@ -331,15 +351,16 @@ function App() {
         )}
       </header>
 
-      {/* Main Tab Content View Container */}
+      {/* Main Tab Content View Container (Lazy Loaded with Suspense for Maximum Speed) */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-6">
-        {activeTab === 'dashboard' && <MainDashboard onNavigateTab={(tab) => handleSelectTab(tab)} />}
-        {activeTab === 'ipo' && <IpoDashboard isEmbedded={true} />}
-        {activeTab === 'trading' && <TradingView />}
-        {activeTab === 'expenses' && <ExpensesView />}
-        {activeTab === 'buy' && <BuyView />}
+        <Suspense fallback={<TabLoadingFallback />}>
+          {activeTab === 'dashboard' && <MainDashboard onNavigateTab={(tab) => handleSelectTab(tab)} />}
+          {activeTab === 'ipo' && <IpoDashboard isEmbedded={true} />}
+          {activeTab === 'trading' && <TradingView />}
+          {activeTab === 'expenses' && <ExpensesView />}
+          {(activeTab === 'notes' || activeTab === 'buy') && <NotesView />}
+        </Suspense>
       </main>
-
 
       {/* Modern Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 sm:px-6 text-center text-xs text-slate-500">

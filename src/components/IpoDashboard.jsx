@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
+import cacheManager from '../utils/cacheManager';
 import {
   Plus,
   UserPlus,
@@ -21,7 +22,6 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
-  LayoutGrid,
   Smartphone,
   Calendar,
   Users
@@ -34,16 +34,31 @@ const isSamePerson = (p1, p2) =>
   String(p1 || '').trim().toLowerCase() === String(p2 || '').trim().toLowerCase();
 
 export default function IpoDashboard({ isEmbedded = false }) {
-  const [ipos, setIpos] = useState([]);
-  const [persons, setPersons] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [ipos, setIpos] = useState(() => {
+    const cached = cacheManager.get('ipos_list');
+    if (Array.isArray(cached)) return cached;
+    try {
+      const stored = JSON.parse(localStorage.getItem('antaryudh_ipo_data') || '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch {
+      return [];
+    }
+  });
+  const [persons, setPersons] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('antaryudh_demat_persons') || '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [viewMode, setViewMode] = useState('cards'); // 'spreadsheet' or 'cards'
   const [pageSize, setPageSize] = useState(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      return 4; // Mobile default max 4 entries
+      return 5; // Mobile default max 4 entries
     }
     return 10; // Web default max 10 entries
   });
@@ -99,9 +114,11 @@ export default function IpoDashboard({ isEmbedded = false }) {
     createdAt: new Date().toISOString().split('T')[0]
   });
 
-  // Fetch IPOs from Backend via Axios
+  // Fetch IPOs from Backend via Axios (with SWR caching)
   const fetchIpos = async () => {
-    setLoading(true);
+    if (ipos.length === 0) {
+      setLoading(true);
+    }
     setErrorMsg(null);
     try {
       const response = await axios.get(API_BASE);
@@ -116,6 +133,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
           }))
         }));
         setIpos(cleanIpos);
+        cacheManager.set('ipos_list', cleanIpos, 120000);
+        localStorage.setItem('antaryudh_ipo_data', JSON.stringify(cleanIpos));
 
         // Extract and combine unique person names (case-insensitive deduplication)
         let savedPersons = [];
@@ -665,28 +684,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                     Live DB
                   </span>
                 </div>
-                <p className="text-[10px] sm:text-[11px] text-slate-400">
-                  Multi-Account Demat Application & Allotment Manager ({pageSize} items per page)
-                </p>
               </div>
-            </div>
-
-            {/* Mobile View Toggle */}
-            <div className="flex md:hidden items-center gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700">
-              <button
-                onClick={() => setViewMode('spreadsheet')}
-                className={`p-1.5 rounded ${viewMode === 'spreadsheet' ? 'bg-cyan-600 text-white' : 'text-slate-400'}`}
-                title="Spreadsheet Grid View"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('cards')}
-                className={`p-1.5 rounded ${viewMode === 'cards' ? 'bg-cyan-600 text-white' : 'text-slate-400'}`}
-                title="Mobile Cards View"
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
             </div>
           </div>
 
@@ -885,7 +883,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                 onChange={(e) => setPageSize(Number(e.target.value))}
                 className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer font-medium"
               >
-                <option value={4} className="bg-slate-900">4 / page (Mobile)</option>
+                <option value={5} className="bg-slate-900">5 / page (Mobile)</option>
                 <option value={10} className="bg-slate-900">10 / page (Web)</option>
                 <option value={20} className="bg-slate-900">20 / page</option>
                 <option value={30} className="bg-slate-900">30 / page</option>
@@ -896,7 +894,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
         </div>
 
         {/* Registered Demat Accounts Pills Bar (Quick View & Delete) */}
-        {persons.length > 0 && (
+        {/* {persons.length > 0 && (
           <div className="flex items-center gap-1.5 overflow-x-auto py-1 px-1 text-xs scrollbar-none flex-wrap bg-slate-900/40 p-2 rounded-xl border border-slate-800/80">
             <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0 mr-1">
               <Users className="w-3.5 h-3.5 text-cyan-400" />
@@ -929,7 +927,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
               <span>Add</span>
             </button>
           </div>
-        )}
+        )} */}
 
         {/* Dynamic Column Alert if no persons added yet */}
         {persons.length === 0 && (
@@ -947,9 +945,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
         )}
 
 
-        {/* 1. Mobile Cards & Dropdown View (Toggleable on small screens) */}
-        {viewMode === 'cards' && (
-          <div className="block md:hidden space-y-3">
+        {/* 1. Mobile Cards & Dropdown View (Default & dedicated for Mobile) */}
+        <div className="block md:hidden space-y-3">
             {/* Mobile Header Bar with Expand/Collapse All */}
             {paginatedIpos.length > 0 && (
               <div className="flex items-center justify-between px-1 py-0.5">
@@ -1193,7 +1190,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                     {/* Person Applications Dropdown / Accordion Body */}
                     {isExpanded && (
                       <div className="mt-3 pt-3 border-t border-cyan-500/20 space-y-2.5 animate-fadeIn">
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-0.5">
+                        {/* <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-0.5">
                           <span className="flex items-center gap-1 text-cyan-400">
                             <Users className="w-3.5 h-3.5" />
                             <span>Person Demat Accounts ({persons.length})</span>
@@ -1201,7 +1198,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                           <span className="text-[10px] font-normal text-slate-500 lowercase">
                             tap checkbox to toggle
                           </span>
-                        </div>
+                        </div> */}
 
                         {persons.length === 0 ? (
                           <div className="p-3 text-center text-xs text-slate-500 bg-slate-950/60 rounded-lg border border-slate-800">
@@ -1304,12 +1301,10 @@ export default function IpoDashboard({ isEmbedded = false }) {
               </div>
             )}
           </div>
-        )}
 
-        {/* 2. Spreadsheet Table Container (Scrollable across all screens) */}
-        {(viewMode === 'spreadsheet' || true) && (
-          <div className={`${viewMode === 'cards' ? 'hidden md:flex' : 'flex'} bg-slate-900/90 border border-slate-800 rounded-xl shadow-xl overflow-hidden flex-col`}>
-            <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900">
+        {/* 2. Spreadsheet Table Container (Dedicated Web / Desktop View) */}
+        <div className="hidden md:flex bg-slate-900/90 border border-slate-800 rounded-xl shadow-xl overflow-hidden flex-col">
+          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900">
               <table className="w-full text-left border-collapse text-xs min-w-[750px]">
                 {/* Table Header */}
                 <thead>
@@ -1412,16 +1407,39 @@ export default function IpoDashboard({ isEmbedded = false }) {
                       const isPositive = pl > 0;
                       const isNegative = pl < 0;
                       const ipoPercent = calculateIpoPercentage(ipo);
+                      const appliedCount = (ipo.applications || []).filter((a) => a.applied).length;
+                      const allottedCount = (ipo.applications || []).filter((a) => a.allotted).length;
+                      const totalDematCount = persons.length;
 
                       return (
                         <tr
                           key={ipo.id}
-                          className="hover:bg-slate-800/40 transition-colors group"
+                          className={`transition-colors group ${
+                            appliedCount > 0
+                              ? 'bg-slate-900/90 hover:bg-slate-800/60'
+                              : 'hover:bg-slate-800/40'
+                          }`}
                         >
                           {/* 1. Left: IPO Name, Lot Cost & Notes */}
                           <td className="py-2.5 px-3 sm:px-4 font-medium text-slate-200 sticky left-0 z-10 bg-slate-900 group-hover:bg-slate-850 min-w-[220px] sm:min-w-[260px] border-r border-slate-800/80 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
-                            <div className="font-semibold text-slate-100 text-xs sm:text-sm tracking-tight truncate max-w-[240px]" title={ipo.ipoName}>
-                              {ipo.ipoName}
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="font-semibold text-slate-100 text-xs sm:text-sm tracking-tight truncate max-w-[180px]" title={ipo.ipoName}>
+                                {ipo.ipoName}
+                              </div>
+                              {/* Web-only Demat Application Count Badge (e.g., 4/7) */}
+                              <span
+                                className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-0.5 rounded-md shrink-0 border transition-all ${
+                                  appliedCount === totalDematCount && totalDematCount > 0
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm shadow-emerald-500/10'
+                                    : appliedCount > 0
+                                    ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 shadow-sm shadow-indigo-500/10'
+                                    : 'bg-slate-950 text-slate-500 border-slate-800'
+                                }`}
+                                title={`${appliedCount} of ${totalDematCount} Demat accounts applied`}
+                              >
+                                <Users className="w-3 h-3 text-indigo-400" />
+                                <span>{appliedCount}/{totalDematCount}</span>
+                              </span>
                             </div>
 
                             {/* Lot Cost & Date Added */}
@@ -1483,11 +1501,11 @@ export default function IpoDashboard({ isEmbedded = false }) {
                             return (
                               <td
                                 key={person}
-                                className={`py-1.5 px-2 min-w-[150px] max-w-[180px] border-r border-slate-800/80 align-middle ${
+                                className={`py-1.5 px-2 min-w-[150px] max-w-[180px] border-r border-slate-800/80 align-middle transition-colors ${
                                   app.allotted
-                                    ? 'bg-emerald-950/20'
+                                    ? 'bg-emerald-950/25'
                                     : app.applied
-                                    ? 'bg-indigo-950/20'
+                                    ? 'bg-indigo-950/40'
                                     : ''
                                 }`}
                               >
@@ -1495,7 +1513,13 @@ export default function IpoDashboard({ isEmbedded = false }) {
                                   {/* Interactive Checkbox Pair */}
                                   <div className="grid grid-cols-2 gap-1">
                                     {/* Applied Checkbox */}
-                                    <label className="flex items-center justify-center gap-1 p-0.5 rounded cursor-pointer bg-slate-950/60 hover:bg-slate-800 border border-slate-800 transition select-none">
+                                    <label
+                                      className={`flex items-center justify-center gap-1 p-0.5 rounded cursor-pointer transition select-none border ${
+                                        app.applied
+                                          ? 'bg-indigo-600/25 border-indigo-500/50 text-indigo-200 shadow-sm'
+                                          : 'bg-slate-950/60 hover:bg-slate-800 border-slate-800'
+                                      }`}
+                                    >
                                       <input
                                         type="checkbox"
                                         checked={Boolean(app.applied)}
@@ -1506,7 +1530,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                                       />
                                       <span
                                         className={`text-[9px] ${
-                                          app.applied ? 'text-indigo-300 font-semibold' : 'text-slate-500'
+                                          app.applied ? 'text-indigo-200 font-bold' : 'text-slate-500'
                                         }`}
                                       >
                                         App
@@ -1517,7 +1541,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                                     <label
                                       className={`flex items-center justify-center gap-1 p-0.5 rounded cursor-pointer transition select-none border ${
                                         app.allotted
-                                          ? 'bg-emerald-500/20 border-emerald-500/40'
+                                          ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200'
                                           : 'bg-slate-950/60 hover:bg-slate-800 border-slate-800'
                                       }`}
                                     >
@@ -1712,7 +1736,6 @@ export default function IpoDashboard({ isEmbedded = false }) {
               </div>
             </div>
           </div>
-        )}
       </div>
 
       {/* Modal: Add New Person Column (Rendered in Body Portal for True Viewport Centering) */}
