@@ -105,7 +105,25 @@ export default function ExpensesView() {
     return `${y}-${m}`;
   };
 
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthStr);
+  const [selectedMonth, setSelectedMonthState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('antaryudh_expense_selected_month');
+      if (saved) return saved;
+    } catch {
+      // Ignore
+    }
+    return getCurrentMonthStr();
+  });
+
+  const setSelectedMonth = (monthVal) => {
+    setSelectedMonthState(monthVal);
+    try {
+      localStorage.setItem('antaryudh_expense_selected_month', monthVal);
+    } catch {
+      // Ignore
+    }
+  };
+
   const [activeTabFilter, setActiveTabFilter] = useState('all'); // 'all' | 'expense' | 'income'
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -314,6 +332,63 @@ export default function ExpensesView() {
       savingsRate
     };
   }, [filteredTransactions]);
+
+  // Last 3 Months Calculation (Current Month M0, Previous Month M-1, 2 Months Ago M-2)
+  const last3MonthsHistory = useMemo(() => {
+    const list = [];
+    const now = new Date();
+
+    for (let i = 0; i < 3; i++) {
+      const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const y = targetDate.getFullYear();
+      const m = String(targetDate.getMonth() + 1).padStart(2, '0');
+      const key = `${y}-${m}`;
+      const label = targetDate.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+      const fullLabel = targetDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      const tag = i === 0 ? 'Current Month' : i === 1 ? 'Last Month' : '2 Months Ago';
+
+      let totalExpense = 0;
+      let totalIncome = 0;
+      let count = 0;
+
+      (Array.isArray(transactions) ? transactions : []).forEach((t) => {
+        if (t.transactionDate && String(t.transactionDate).startsWith(key)) {
+          const amt = parseFloat(t.amount) || 0;
+          if (t.type === 'income') {
+            totalIncome += amt;
+          } else {
+            totalExpense += amt;
+            count += 1;
+          }
+        }
+      });
+
+      const netSavings = totalIncome - totalExpense;
+      const savingsRate = totalIncome > 0 ? ((netSavings / totalIncome) * 100).toFixed(0) : null;
+
+      list.push({
+        key,
+        label,
+        fullLabel,
+        tag,
+        index: i,
+        totalExpense,
+        totalIncome,
+        netSavings,
+        savingsRate,
+        count
+      });
+    }
+
+    const total3MExpense = list.reduce((acc, item) => acc + item.totalExpense, 0);
+    const avg3MExpense = total3MExpense / 3;
+
+    return {
+      months: list,
+      total3MExpense,
+      avg3MExpense
+    };
+  }, [transactions]);
 
   // Open Modal for New Entry
   const handleOpenAddModal = (defaultType = 'expense') => {
@@ -567,7 +642,93 @@ export default function ExpensesView() {
         </div>
       </div>
 
-      {/* 2. Responsive Summary KPI Cards (2x2 on Mobile, 4-col on Desktop) */}
+      {/* 2. LAST 3 MONTHS EXPENSE & CASHFLOW HISTORY LOGS */}
+      <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3.5 sm:p-5 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-indigo-400" />
+            <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider font-mono">
+              Last 3 Months Expense History Log
+            </h3>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] sm:text-[11px] font-mono text-slate-400 flex-wrap">
+            <span>3-Month Outflow Avg: <strong className="text-rose-400">{formatCurrency(last3MonthsHistory.avg3MExpense)}</strong></span>
+            <span>•</span>
+            <span>Total 3M Spent: <strong className="text-slate-200">{formatCurrency(last3MonthsHistory.total3MExpense)}</strong></span>
+          </div>
+        </div>
+
+        {/* 3 Interactive Month History Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3.5">
+          {last3MonthsHistory.months.map((mItem) => {
+            const isCurrentFilter = selectedMonth === mItem.key;
+            return (
+              <div
+                key={mItem.key}
+                onClick={() => setSelectedMonth(mItem.key)}
+                className={`p-3 sm:p-4 rounded-xl border transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-2.5 relative overflow-hidden group ${
+                  isCurrentFilter
+                    ? 'bg-slate-900 border-indigo-500 shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-500/50'
+                    : 'bg-slate-950/70 hover:bg-slate-950 border-slate-800/80 hover:border-slate-700'
+                }`}
+              >
+                {/* Top Badge and Month Name */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-xs sm:text-sm text-white font-mono">
+                      {mItem.label}
+                    </span>
+                    <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-md border ${
+                      mItem.index === 0
+                        ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}>
+                      {mItem.tag}
+                    </span>
+                  </div>
+
+                  {isCurrentFilter && (
+                    <span className="flex items-center gap-1 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 animate-pulse">
+                      <CheckCircle2 className="w-3 h-3 text-indigo-400" />
+                      <span>Active</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Main Metric: Spent & Items */}
+                <div className="flex items-baseline justify-between pt-1">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-medium block">Total Spent</span>
+                    <div className="text-base sm:text-xl font-black font-mono tracking-tight text-rose-400">
+                      -{formatCurrency(mItem.totalExpense)}
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 font-medium block">Inflow / Net</span>
+                    <div className="text-[11px] sm:text-xs font-mono font-bold text-emerald-400">
+                      +{formatCurrency(mItem.totalIncome)}
+                    </div>
+                    <div className={`text-[10px] font-mono font-bold ${mItem.netSavings >= 0 ? 'text-cyan-300' : 'text-rose-400'}`}>
+                      Net: {mItem.netSavings >= 0 ? '+' : ''}{formatCurrency(mItem.netSavings)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom CTA info */}
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+                  <span>{mItem.count} expense items</span>
+                  <span className={`font-semibold group-hover:underline ${isCurrentFilter ? 'text-indigo-300' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                    {isCurrentFilter ? 'Viewing in Ledger' : 'Click to View →'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3. Responsive Summary KPI Cards (2x2 on Mobile, 4-col on Desktop) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         
         {/* Card 1: Total Expenses */}
