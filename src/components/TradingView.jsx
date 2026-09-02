@@ -184,6 +184,18 @@ export default function TradingView() {
     }
   };
 
+  // Sync cache & localStorage whenever trades state updates
+  useEffect(() => {
+    if (trades && Array.isArray(trades)) {
+      cacheManager.set('trades_list', trades, 120000);
+      try {
+        localStorage.setItem('antaryudh_trading_data', JSON.stringify(trades));
+      } catch (e) {
+        console.warn('Could not sync trades to localStorage:', e);
+      }
+    }
+  }, [trades]);
+
   useEffect(() => {
     fetchTrades();
     setStockPage(1);
