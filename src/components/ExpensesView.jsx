@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 
 import cacheManager from '../utils/cacheManager';
+import ExpenseAnalysis from './ExpenseAnalysis';
 
 const API_BASE = '/api/expenses';
 
@@ -96,6 +97,9 @@ export default function ExpensesView() {
   });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+
+  // View Mode: 'journal' (default spreadsheet/ledger) | 'analysis' (deep monthly Realized P&L and analytics)
+  const [viewMode, setViewMode] = useState('journal');
 
   // Month navigation: format 'YYYY-MM' (e.g. '2026-08') or 'all'
   const getCurrentMonthStr = () => {
@@ -519,6 +523,11 @@ export default function ExpensesView() {
     }
   };
 
+  // If in Deep Analysis View Mode, render ExpenseAnalysis
+  if (viewMode === 'analysis') {
+    return <ExpenseAnalysis transactions={transactions} onBack={() => setViewMode('journal')} />;
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6 animate-fadeIn font-sans selection:bg-rose-500 selection:text-white max-w-full overflow-hidden">
       
@@ -551,21 +560,30 @@ export default function ExpensesView() {
             </div>
 
             {/* Top Action Buttons (Responsive Touch Grid) */}
-            <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+              <button
+                onClick={() => setViewMode('analysis')}
+                className="flex-1 sm:flex-none py-2 px-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-rose-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 shrink-0"
+                title="Open Comprehensive Cashflow & Monthly Realized P&L Analytics"
+              >
+                <PieChart className="w-3.5 h-3.5" />
+                <span>Analyze &gt;</span>
+              </button>
+
               <button
                 onClick={() => handleOpenAddModal('expense')}
-                className="py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1"
+                className="py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
               >
-                <ArrowDownLeft className="w-3.5 h-3.5" />
-                <span> Expense</span>
+                <ArrowDownLeft className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate"> Expense</span>
               </button>
 
               <button
                 onClick={() => handleOpenAddModal('income')}
-                className="py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-emerald-600/25 transition active:scale-95 flex items-center justify-center gap-1"
+                className="py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-emerald-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
               >
-                <ArrowUpRight className="w-3.5 h-3.5" />
-                <span> Income</span>
+                <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate"> Income</span>
               </button>
             </div>
           </div>
