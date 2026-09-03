@@ -133,18 +133,20 @@ export default function MainDashboard({ onNavigateTab }) {
     };
   }, [ipos]);
 
-  // 2. Trading Journal Analytics Calculations
+  // 2. Trading Journal Analytics Calculations (Full multi-leg & partial closes support)
   const tradingStats = useMemo(() => {
     let stockPl = 0;
     let intradayPl = 0;
     let winningTrades = 0;
     let closedTrades = 0;
     let openTrades = 0;
+    let totalInvested = 0;
 
     (Array.isArray(trades) ? trades : []).forEach((t) => {
       const buyPrice = parseFloat(t.buyPrice) || 0;
       const qty = parseInt(t.quantity, 10) || 0;
       const charges = parseFloat(t.charges) || 0;
+      totalInvested += buyPrice * qty;
 
       const isClosed = t.sellPrice !== null && t.sellPrice !== undefined && t.sellPrice !== '';
       if (isClosed) {
@@ -174,7 +176,8 @@ export default function MainDashboard({ onNavigateTab }) {
       intradayPl,
       netPl,
       winningTrades,
-      winRate
+      winRate,
+      totalInvested
     };
   }, [trades]);
 
@@ -215,6 +218,19 @@ export default function MainDashboard({ onNavigateTab }) {
       count: expenses.length
     };
   }, [expenses]);
+
+  // Combined Portfolio Net P&L (Trading + IPOs + Cashflow)
+  const portfolioNetWealth = useMemo(() => {
+    const totalPnl = (tradingStats.netPl || 0) + (ipoStats.totalProfitLoss || 0);
+    const combinedIncome = (cashflowStats.totalIncome || 0);
+    const combinedExpense = (cashflowStats.totalExpense || 0);
+    const netCashSavings = combinedIncome - combinedExpense;
+    return {
+      totalPnl,
+      netCashSavings,
+      totalRealizedGain: totalPnl + Math.max(0, netCashSavings)
+    };
+  }, [tradingStats, ipoStats, cashflowStats]);
 
   // 4. Notes & Vault Stats
   const noteStats = useMemo(() => {
@@ -314,29 +330,104 @@ export default function MainDashboard({ onNavigateTab }) {
   }, [trades, ipos, expenses]);
 
   return (
-    <div className="space-y-5 animate-fadeIn">
-      {/* 1. TOP SHORTCUT QUICK-ACCESS BUTTONS (Mobile Responsive Grid) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+    <div className="space-y-3.5 sm:space-y-6 animate-fadeIn font-sans max-w-full overflow-hidden">
+      {/* 1. EXECUTIVE WEALTH & REALIZED P&L HERO BANNER */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 p-3.5 sm:p-6 shadow-2xl">
+        <div className="absolute top-0 right-0 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+        <div className="absolute bottom-0 left-1/3 w-60 h-60 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3.5 sm:gap-4">
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="p-1 sm:p-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shrink-0">
+                <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </span>
+              <h2 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-300 font-mono">
+                Executive Portfolio Overview
+              </h2>
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold font-mono">
+                Live Cloud
+              </span>
+            </div>
+
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-xl sm:text-3xl md:text-4xl font-black font-mono tracking-tight text-white">
+                {portfolioNetWealth.totalPnl >= 0 ? '+' : ''}{formatCurrency(portfolioNetWealth.totalPnl)}
+              </span>
+              <span className="text-[11px] sm:text-xs font-semibold text-slate-400 truncate">
+                Total Realized Profits (Trading + IPOs)
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[10px] sm:text-xs font-mono text-slate-400">
+              <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 truncate">
+                Trading: <strong className={tradingStats.netPl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{formatCurrency(tradingStats.netPl)}</strong>
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 truncate">
+                IPOs: <strong className="text-cyan-400">{formatCurrency(ipoStats.totalProfitLoss)}</strong>
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 truncate">
+                Savings: <strong className="text-purple-300">{formatCurrency(cashflowStats.netSavings)}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Quick Action Navigation Buttons (Responsive 2x2 Grid on Mobile) */}
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0 w-full md:w-auto">
+            <button
+              onClick={() => onNavigateTab('trading')}
+              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-blue-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+            >
+              <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Trading</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('ipo')}
+              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-cyan-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">IPO Matrix</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('expenses')}
+              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+            >
+              <CreditCard className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Expenses</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('notes')}
+              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-purple-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-purple-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+            >
+              <FileText className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Notes</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. TOP SHORTCUT QUICK-ACCESS BUTTONS (Responsive Grid) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
         {/* Shortcut 1: IPO Matrix */}
         <button
           onClick={() => onNavigateTab('ipo')}
-          className="group relative p-3.5 sm:p-5 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 hover:border-cyan-500/50 shadow-lg hover:shadow-cyan-500/10 transition-all duration-300 active:scale-[0.98] text-left flex flex-col justify-between overflow-hidden"
+          className="group relative p-3 sm:p-4 md:p-5 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 hover:border-cyan-500/50 shadow-lg hover:shadow-cyan-500/10 transition-all duration-300 active:scale-[0.98] text-left flex flex-col justify-between overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/10 rounded-full blur-2xl group-hover:bg-cyan-500/20 transition-all" />
           
           <div className="flex items-center justify-between mb-2 sm:mb-3">
-            <div className="p-2 sm:p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 group-hover:scale-110 transition-transform">
-              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="p-1.5 sm:p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 group-hover:scale-110 transition-transform shrink-0">
+              <TrendingUp className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+            <span className="text-[9px] sm:text-[10px] font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 truncate">
               {ipoStats.count} IPOs
             </span>
           </div>
 
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 min-w-0">
             <h3 className="text-xs sm:text-base font-bold text-white group-hover:text-cyan-300 transition-colors flex items-center justify-between">
-              <span>IPO Matrix</span>
-              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-cyan-300 group-hover:translate-x-1 transition-all" />
+              <span className="truncate">IPO Matrix</span>
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-cyan-300 group-hover:translate-x-1 transition-all shrink-0" />
             </h3>
             <p className="text-[10px] sm:text-xs text-slate-400 truncate">
               {ipoStats.totalAllotted} Allotted Lots • {formatCurrency(ipoStats.totalProfitLoss)} P&L
@@ -347,23 +438,23 @@ export default function MainDashboard({ onNavigateTab }) {
         {/* Shortcut 2: Trading Journal */}
         <button
           onClick={() => onNavigateTab('trading')}
-          className="group relative p-3.5 sm:p-5 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 hover:border-indigo-500/50 shadow-lg hover:shadow-indigo-500/10 transition-all duration-300 active:scale-[0.98] text-left flex flex-col justify-between overflow-hidden"
+          className="group relative p-3 sm:p-4 md:p-5 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 hover:border-indigo-500/50 shadow-lg hover:shadow-indigo-500/10 transition-all duration-300 active:scale-[0.98] text-left flex flex-col justify-between overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition-all" />
           
           <div className="flex items-center justify-between mb-2 sm:mb-3">
-            <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 group-hover:scale-110 transition-transform">
-              <BarChart2 className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="p-1.5 sm:p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 group-hover:scale-110 transition-transform shrink-0">
+              <BarChart2 className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+            <span className="text-[9px] sm:text-[10px] font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 truncate">
               {tradingStats.total} Setups
             </span>
           </div>
 
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 min-w-0">
             <h3 className="text-xs sm:text-base font-bold text-white group-hover:text-indigo-300 transition-colors flex items-center justify-between">
-              <span>Trading Journal</span>
-              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-indigo-300 group-hover:translate-x-1 transition-all" />
+              <span className="truncate">Trading Journal</span>
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-indigo-300 group-hover:translate-x-1 transition-all shrink-0" />
             </h3>
             <p className="text-[10px] sm:text-xs text-slate-400 truncate">
               {tradingStats.winRate}% Win Rate • {tradingStats.openTrades} Active Trades
@@ -374,23 +465,23 @@ export default function MainDashboard({ onNavigateTab }) {
         {/* Shortcut 3: Expenses & Cashflow */}
         <button
           onClick={() => onNavigateTab('expenses')}
-          className="group relative p-3.5 sm:p-5 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 hover:border-rose-500/50 shadow-lg hover:shadow-rose-500/10 transition-all duration-300 active:scale-[0.98] text-left flex flex-col justify-between overflow-hidden"
+          className="group relative p-3 sm:p-4 md:p-5 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 hover:border-rose-500/50 shadow-lg hover:shadow-rose-500/10 transition-all duration-300 active:scale-[0.98] text-left flex flex-col justify-between overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-all" />
           
           <div className="flex items-center justify-between mb-2 sm:mb-3">
-            <div className="p-2 sm:p-2.5 rounded-xl bg-rose-500/10 text-rose-400 group-hover:scale-110 transition-transform">
-              <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="p-1.5 sm:p-2.5 rounded-xl bg-rose-500/10 text-rose-400 group-hover:scale-110 transition-transform shrink-0">
+              <CreditCard className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20">
+            <span className="text-[9px] sm:text-[10px] font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20 truncate">
               {cashflowStats.count} Txns
             </span>
           </div>
 
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 min-w-0">
             <h3 className="text-xs sm:text-base font-bold text-white group-hover:text-rose-300 transition-colors flex items-center justify-between">
-              <span>Expenses</span>
-              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-rose-300 group-hover:translate-x-1 transition-all" />
+              <span className="truncate">Expenses</span>
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-rose-300 group-hover:translate-x-1 transition-all shrink-0" />
             </h3>
             <p className="text-[10px] sm:text-xs text-slate-400 truncate">
               {formatCurrency(cashflowStats.monthExpense)} Month Spent • Ledger
@@ -401,23 +492,23 @@ export default function MainDashboard({ onNavigateTab }) {
         {/* Shortcut 4: Notes & Secret Vault */}
         <button
           onClick={() => onNavigateTab('notes')}
-          className="group relative p-3.5 sm:p-5 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 hover:border-purple-500/50 shadow-lg hover:shadow-purple-500/10 transition-all duration-300 active:scale-[0.98] text-left flex flex-col justify-between overflow-hidden"
+          className="group relative p-3 sm:p-4 md:p-5 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 hover:border-purple-500/50 shadow-lg hover:shadow-purple-500/10 transition-all duration-300 active:scale-[0.98] text-left flex flex-col justify-between overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all" />
           
           <div className="flex items-center justify-between mb-2 sm:mb-3">
-            <div className="p-2 sm:p-2.5 rounded-xl bg-purple-500/10 text-purple-400 group-hover:scale-110 transition-transform">
-              <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="p-1.5 sm:p-2.5 rounded-xl bg-purple-500/10 text-purple-400 group-hover:scale-110 transition-transform shrink-0">
+              <FileText className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20">
+            <span className="text-[9px] sm:text-[10px] font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20 truncate">
               {noteStats.total} Notes
             </span>
           </div>
 
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 min-w-0">
             <h3 className="text-xs sm:text-base font-bold text-white group-hover:text-purple-300 transition-colors flex items-center justify-between">
-              <span>Notes & Vault</span>
-              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-purple-300 group-hover:translate-x-1 transition-all" />
+              <span className="truncate">Notes & Vault</span>
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-purple-300 group-hover:translate-x-1 transition-all shrink-0" />
             </h3>
             <p className="text-[10px] sm:text-xs text-slate-400 truncate">
               {noteStats.secretCount} Passwords • {buyStats.total} Wishlist Items
@@ -426,15 +517,15 @@ export default function MainDashboard({ onNavigateTab }) {
         </button>
       </div>
 
-      {/* 2. DEEP ANALYTICS: MONTHLY CASHFLOW HEALTH & RECENT ACTIVITY FEED */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5">
+      {/* 3. DEEP ANALYTICS: MONTHLY CASHFLOW HEALTH & RECENT ACTIVITY FEED */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-5">
         {/* Left: Monthly Cashflow & Savings Distribution Meter */}
-        <div className="lg:col-span-2 bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+        <div className="lg:col-span-2 bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3.5 sm:p-6 shadow-xl space-y-3.5 sm:space-y-5">
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 sm:pb-3">
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-emerald-400" />
+              <Activity className="w-4 h-4 text-emerald-400 shrink-0" />
               <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider font-mono">
-                Cashflow Health & Monthly Dynamics
+                Cashflow Health & Dynamics
               </h3>
             </div>
             <span className="text-[10px] sm:text-[11px] font-mono text-slate-400">
@@ -442,36 +533,36 @@ export default function MainDashboard({ onNavigateTab }) {
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+            <div className="p-2 sm:p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-center sm:text-left">
               <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate block">Month Inflow</span>
-              <div className="text-xs sm:text-lg font-bold font-mono text-emerald-400 mt-0.5 sm:mt-1 truncate">
+              <div className="text-xs sm:text-base md:text-lg font-bold font-mono text-emerald-400 mt-0.5 sm:mt-1 truncate">
                 +{formatCurrency(cashflowStats.monthIncome)}
               </div>
             </div>
-            <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+            <div className="p-2 sm:p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-center sm:text-left">
               <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate block">Month Outflow</span>
-              <div className="text-xs sm:text-lg font-bold font-mono text-rose-400 mt-0.5 sm:mt-1 truncate">
+              <div className="text-xs sm:text-base md:text-lg font-bold font-mono text-rose-400 mt-0.5 sm:mt-1 truncate">
                 -{formatCurrency(cashflowStats.monthExpense)}
               </div>
             </div>
-            <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+            <div className="p-2 sm:p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-center sm:text-left">
               <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate block">Savings Rate</span>
-              <div className="text-xs sm:text-lg font-bold font-mono text-cyan-400 mt-0.5 sm:mt-1">
+              <div className="text-xs sm:text-base md:text-lg font-bold font-mono text-cyan-400 mt-0.5 sm:mt-1">
                 {cashflowStats.savingsRate}%
               </div>
             </div>
           </div>
 
           {/* Savings Ratio Progress Bar */}
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400 text-[11px] sm:text-xs">Expense vs Inflow Ratio</span>
-              <span className="font-mono text-slate-300 text-[11px] sm:text-xs">
-                Spent: {cashflowStats.monthIncome > 0 ? ((cashflowStats.monthExpense / cashflowStats.monthIncome) * 100).toFixed(0) : '0'}% of Income
+              <span className="text-slate-400 text-[10px] sm:text-xs">Expense vs Inflow Ratio</span>
+              <span className="font-mono text-slate-300 text-[10px] sm:text-xs">
+                Spent: {cashflowStats.monthIncome > 0 ? ((cashflowStats.monthExpense / cashflowStats.monthIncome) * 100).toFixed(0) : '0'}%
               </span>
             </div>
-            <div className="w-full h-2.5 sm:h-3 bg-slate-950 rounded-full overflow-hidden flex border border-slate-800">
+            <div className="w-full h-2 sm:h-3 bg-slate-950 rounded-full overflow-hidden flex border border-slate-800">
               <div
                 className="bg-gradient-to-r from-rose-500 to-amber-500 h-full transition-all duration-500"
                 style={{
@@ -485,30 +576,30 @@ export default function MainDashboard({ onNavigateTab }) {
                 }}
               />
             </div>
-            <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 font-mono">
+            <div className="flex items-center justify-between text-[9px] sm:text-[11px] text-slate-400 font-mono">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-rose-500" />
-                <span>Outflow ({formatCurrency(cashflowStats.monthExpense)})</span>
+                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-rose-500 shrink-0" />
+                <span className="truncate">Out ({formatCurrency(cashflowStats.monthExpense)})</span>
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span>Retained ({formatCurrency(cashflowStats.monthSavings)})</span>
+                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 shrink-0" />
+                <span className="truncate">Retained ({formatCurrency(cashflowStats.monthSavings)})</span>
               </span>
             </div>
           </div>
 
           {/* Planned Buys Target Funding Meter */}
-          <div className="pt-2 border-t border-slate-800/80 space-y-2">
+          <div className="pt-2 border-t border-slate-800/80 space-y-1.5 sm:space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400 flex items-center gap-1.5 font-semibold text-[11px] sm:text-xs">
-                <ShoppingBag className="w-3.5 h-3.5 text-purple-400" />
-                <span>Planned Buys & Goals Funding</span>
+              <span className="text-slate-400 flex items-center gap-1.5 font-semibold text-[10px] sm:text-xs">
+                <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-400 shrink-0" />
+                <span className="truncate">Goals Funding</span>
               </span>
-              <span className="font-mono text-purple-300 font-bold text-[11px] sm:text-xs">
+              <span className="font-mono text-purple-300 font-bold text-[10px] sm:text-xs">
                 {formatCurrency(buyStats.totalSaved)} / {formatCurrency(buyStats.totalEst)} ({buyStats.fundingPct}%)
               </span>
             </div>
-            <div className="w-full h-2 sm:h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+            <div className="w-full h-1.5 sm:h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
               <div
                 className="bg-gradient-to-r from-purple-600 via-indigo-500 to-cyan-400 h-full transition-all duration-500"
                 style={{ width: `${buyStats.fundingPct}%` }}

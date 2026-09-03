@@ -67,6 +67,41 @@ const DECISION_PRESETS = [
   'Custom / Other...'
 ];
 
+/**
+ * Standard Equity Charges Auto-Calculator (Brokerage, STT, Exchange, SEBI, GST, Stamp Duty, DP)
+ */
+export const calculateTradeCharges = (quantity, price, tradeType = 'stock', isBuy = true) => {
+  const qty = parseFloat(quantity) || 0;
+  const prc = parseFloat(price) || 0;
+  const tradeValue = qty * prc;
+  if (tradeValue <= 0) return 0;
+
+  const isStock = tradeType !== 'intraday';
+
+  const brokerage = Math.min(20, tradeValue * 0.0005);
+  const exchangeCharge = tradeValue * 0.0000325;
+  const sebiCharge = tradeValue * 0.000001;
+  const gst = 0.18 * (brokerage + exchangeCharge + sebiCharge);
+
+  let stampDuty = 0;
+  let stt = 0;
+
+  if (!isStock) {
+    // Intraday
+    stampDuty = isBuy ? (tradeValue * 0.00003) : 0;
+    stt = isBuy ? 0 : (tradeValue * 0.00025);
+  } else {
+    // Delivery (stock)
+    stampDuty = isBuy ? (tradeValue * 0.00015) : 0;
+    stt = tradeValue * 0.001;
+  }
+
+  const dpCharge = (!isBuy && isStock) ? 21.50 : 0;
+
+  const totalCharges = brokerage + exchangeCharge + sebiCharge + gst + stampDuty + stt + dpCharge;
+  return Math.round(totalCharges * 100) / 100;
+};
+
 export default function TradingView() {
   const [trades, setTrades] = useState(() => {
     const cached = cacheManager.get('trades_list');
@@ -520,6 +555,45 @@ export default function TradingView() {
     };
   }, [trades]);
 
+  // Reactive Auto-Calculate Charges for Simple Modal
+  useEffect(() => {
+    if (modalMode === 'simple' && isModalOpen) {
+      const bPrice = parseFloat(formBuyPrice) || 0;
+      const bQty = parseInt(formQuantity, 10) || 0;
+      if (bPrice > 0 && bQty > 0) {
+        const buyChg = calculateTradeCharges(bQty, bPrice, formTradeType, true);
+        const sPrice = formIsExited && formSellPrice ? parseFloat(formSellPrice) || 0 : 0;
+        const sellChg = formIsExited && sPrice > 0 ? calculateTradeCharges(bQty, sPrice, formTradeType, false) : 0;
+        const total = buyChg + sellChg;
+        setFormCharges(total > 0 ? String(total) : '0');
+      }
+    }
+  }, [formQuantity, formBuyPrice, formTradeType, formIsExited, formSellPrice, modalMode, isModalOpen]);
+
+  // Reactive Auto-Calculate Charges for Partial Sell Modal
+  useEffect(() => {
+    if (partialSellTarget && partialSellQty && partialSellPrice) {
+      const q = parseInt(partialSellQty, 10) || 0;
+      const p = parseFloat(partialSellPrice) || 0;
+      if (q > 0 && p > 0) {
+        const chg = calculateTradeCharges(q, p, partialSellTarget.tradeType, false);
+        setPartialSellCharges(String(chg));
+      }
+    }
+  }, [partialSellQty, partialSellPrice, partialSellTarget]);
+
+  // Reactive Auto-Calculate Charges for Partial Buy Modal
+  useEffect(() => {
+    if (partialBuyTarget && partialBuyQty && partialBuyPrice) {
+      const q = parseInt(partialBuyQty, 10) || 0;
+      const p = parseFloat(partialBuyPrice) || 0;
+      if (q > 0 && p > 0) {
+        const chg = calculateTradeCharges(q, p, partialBuyTarget.tradeType, true);
+        setPartialBuyCharges(String(chg));
+      }
+    }
+  }, [partialBuyQty, partialBuyPrice, partialBuyTarget]);
+
   // Open Full Add Trade Modal
   const handleOpenAddModal = (defaultType = 'stock') => {
     setEditingTrade(null);
@@ -530,7 +604,7 @@ export default function TradingView() {
     setFormBuyDate(today);
     setFormBuyPrice('');
     setFormQuantity('1');
-    setFormCharges(defaultType === 'intraday' ? '40' : '20');
+    setFormCharges('0');
     setFormTradeDecision('Self');
     setFormCustomDecision('');
     setFormIsExited(false);
@@ -544,7 +618,7 @@ export default function TradingView() {
         date: today,
         price: '',
         quantity: '1',
-        charges: defaultType === 'intraday' ? '40' : '20',
+        charges: '0',
         notes: 'Initial Entry'
       }
     ]);
@@ -611,22 +685,29 @@ export default function TradingView() {
   // Open Quick Partial Sell Modal
   const handleOpenPartialSellModal = (trade) => {
     const metrics = calculateTradeMetrics(trade);
+    const remQty = metrics.remainingQty || 1;
+    const estPrice = metrics.avgBuyPrice || 0;
+    const autoChg = calculateTradeCharges(remQty, estPrice, trade.tradeType, false);
+
     setPartialSellTarget(trade);
     setPartialSellDate(new Date().toISOString().split('T')[0]);
-    setPartialSellQty(String(metrics.remainingQty || 1));
+    setPartialSellQty(String(remQty));
     setPartialSellPrice(metrics.avgBuyPrice ? String(metrics.avgBuyPrice) : '');
-    setPartialSellCharges('20');
-    setPartialSellNotes(metrics.remainingQty > 1 ? 'Partial Exit' : 'Full Exit');
+    setPartialSellCharges(String(autoChg));
+    setPartialSellNotes(remQty > 1 ? 'Partial Exit' : 'Full Exit');
   };
 
   // Open Quick Partial Buy (Accumulate) Modal
   const handleOpenPartialBuyModal = (trade) => {
     const metrics = calculateTradeMetrics(trade);
+    const estPrice = metrics.avgBuyPrice || 0;
+    const autoChg = calculateTradeCharges(1, estPrice, trade.tradeType, true);
+
     setPartialBuyTarget(trade);
     setPartialBuyDate(new Date().toISOString().split('T')[0]);
     setPartialBuyQty('1');
     setPartialBuyPrice(metrics.avgBuyPrice ? String(metrics.avgBuyPrice) : '');
-    setPartialBuyCharges('20');
+    setPartialBuyCharges(String(autoChg));
     setPartialBuyNotes('Add Quantity (Averaging)');
   };
 
@@ -726,7 +807,7 @@ export default function TradingView() {
         date: new Date().toISOString().split('T')[0],
         price: '',
         quantity: '1',
-        charges: '20',
+        charges: '0',
         notes: type === 'BUY' ? 'Buy Entry' : 'Partial Exit'
       }
     ]);
@@ -738,7 +819,20 @@ export default function TradingView() {
 
   const handleUpdateFormLeg = (id, field, value) => {
     setFormLegs((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, [field]: value } : l))
+      prev.map((l) => {
+        if (l.id !== id) return l;
+        const updated = { ...l, [field]: value };
+        if (field === 'price' || field === 'quantity' || field === 'type') {
+          const isBuy = (field === 'type' ? value : updated.type) !== 'SELL';
+          const qty = field === 'quantity' ? value : updated.quantity;
+          const prc = field === 'price' ? value : updated.price;
+          const autoChg = calculateTradeCharges(qty, prc, formTradeType, isBuy);
+          if (autoChg > 0) {
+            updated.charges = String(autoChg);
+          }
+        }
+        return updated;
+      })
     );
   };
 
@@ -1944,11 +2038,11 @@ export default function TradingView() {
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl space-y-3.5 max-h-[90vh] flex flex-col relative z-[100000] my-auto"
+              className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl max-w-xl w-full p-3.5 sm:p-6 shadow-2xl space-y-3.5 max-h-[92vh] flex flex-col relative z-[100000] my-auto overflow-hidden"
             >
               {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 shrink-0">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 shrink-0 gap-1.5 sm:gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
                   <div
                     className={clsx(
                       'p-1.5 sm:p-2 rounded-xl text-white shadow-md shrink-0',
@@ -1958,34 +2052,34 @@ export default function TradingView() {
                     )}
                   >
                     {formTradeType === 'intraday' ? (
-                      <Zap className="w-4 h-4" />
+                      <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     ) : (
-                      <TrendingUp className="w-4 h-4" />
+                      <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     )}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <h3 className="text-xs sm:text-base font-bold text-white truncate">
                       {editingTrade
-                        ? 'Edit Trade Entry'
+                        ? 'Edit Trade'
                         : formTradeType === 'intraday'
-                        ? 'Log Intraday Trade'
+                        ? 'Log Intraday'
                         : 'Log Stock Trade'}
                     </h3>
-                    <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">
-                      Support for partial buy averaging and partial scaling out
+                    <p className="text-[10px] text-slate-400 truncate hidden sm:block">
+                      Support for partial buy averaging & scaling out
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {/* Toggle Simple vs Multi-Leg Mode */}
-                  <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                  <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 shrink-0">
                     <button
                       type="button"
                       onClick={() => setModalMode('simple')}
                       className={clsx(
-                        'px-2 py-1 rounded text-[10px] font-bold transition',
-                        modalMode === 'simple' ? 'bg-cyan-600 text-white' : 'text-slate-400'
+                        'px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] font-bold transition',
+                        modalMode === 'simple' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
                       )}
                     >
                       Simple
@@ -1994,18 +2088,19 @@ export default function TradingView() {
                       type="button"
                       onClick={() => setModalMode('multileg')}
                       className={clsx(
-                        'px-2 py-1 rounded text-[10px] font-bold transition flex items-center gap-1',
-                        modalMode === 'multileg' ? 'bg-cyan-600 text-white' : 'text-slate-400'
+                        'px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] font-bold transition flex items-center gap-0.5 sm:gap-1',
+                        modalMode === 'multileg' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
                       )}
                     >
-                      <Split className="w-3 h-3" />
+                      <Split className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                       <span>Multi-Leg</span>
                     </button>
                   </div>
 
                   <button
                     onClick={() => setIsModalOpen(false)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition shrink-0"
+                    className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition shrink-0"
+                    title="Close"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -2013,7 +2108,7 @@ export default function TradingView() {
               </div>
 
               {/* Scrollable Form Body */}
-              <form onSubmit={handleSaveTrade} className="space-y-3 flex-1 overflow-y-auto pr-1">
+              <form onSubmit={handleSaveTrade} className="space-y-3 flex-1 overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin scrollbar-thumb-slate-700">
                 {/* Trade Type Selector */}
                 <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
                   <button
@@ -2114,14 +2209,19 @@ export default function TradingView() {
                       </div>
 
                       <div>
-                        <label className="block text-[11px] sm:text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1">
-                          <Receipt className="w-3 h-3 text-amber-400" />
-                          <span>Charges (₹)</span>
+                        <label className="block text-[11px] sm:text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <Receipt className="w-3 h-3 text-amber-400" />
+                            <span>Charges (₹)</span>
+                          </span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold" title="Auto calculated from Brokerage, STT, Exchange, SEBI, GST, Stamp Duty & DP charges">
+                            Auto ⚡
+                          </span>
                         </label>
                         <input
                           type="number"
                           step="any"
-                          placeholder="20"
+                          placeholder="0.00"
                           value={formCharges}
                           onChange={(e) => setFormCharges(e.target.value)}
                           className="w-full px-2.5 py-1.5 sm:py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-cyan-500 transition"
@@ -2512,13 +2612,16 @@ export default function TradingView() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Charges (₹)
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                      <span>Charges (₹)</span>
+                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold" title="Auto calculated from Brokerage, STT, Exchange, SEBI, GST, Stamp Duty & DP charges">
+                        Auto ⚡
+                      </span>
                     </label>
                     <input
                       type="number"
                       step="any"
-                      placeholder="20"
+                      placeholder="0.00"
                       value={partialSellCharges}
                       onChange={(e) => setPartialSellCharges(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
@@ -2668,13 +2771,16 @@ export default function TradingView() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Charges (₹)
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                      <span>Charges (₹)</span>
+                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 font-bold" title="Auto calculated from Brokerage, STT, Exchange, SEBI, GST, Stamp Duty & DP charges">
+                        Auto ⚡
+                      </span>
                     </label>
                     <input
                       type="number"
                       step="any"
-                      placeholder="20"
+                      placeholder="0.00"
                       value={partialBuyCharges}
                       onChange={(e) => setPartialBuyCharges(e.target.value)}
                       disabled={isSubmittingPartialBuy}
