@@ -36,11 +36,13 @@ import {
   HelpCircle,
   Tag,
   AlertCircle,
-  X
+  X,
+  Download
 } from 'lucide-react';
 
 import cacheManager from '../utils/cacheManager';
 import ExpenseAnalysis from './ExpenseAnalysis';
+import { exportExpensesToExcel } from '../utils/excelExporter';
 
 const API_BASE = '/api/expenses';
 
@@ -133,6 +135,7 @@ export default function ExpensesView() {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
 
   // Form State
@@ -246,18 +249,31 @@ export default function ExpensesView() {
     setSelectedMonth(`${y}-${String(m).padStart(2, '0')}`);
   };
 
+  // Helper to extract robust YYYY-MM key from any date representation
+  const getTxMonthKey = (dateVal) => {
+    if (!dateVal) return '';
+    try {
+      const d = new Date(dateVal);
+      if (!isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        return `${y}-${m}`;
+      }
+    } catch {}
+    const match = String(dateVal).match(/^(\d{4})[-/](\d{1,2})/);
+    if (match) {
+      return `${match[1]}-${String(match[2]).padStart(2, '0')}`;
+    }
+    return '';
+  };
+
   // Available Months list from transaction history + current month
   const availableMonths = useMemo(() => {
     const set = new Set();
     set.add(getCurrentMonthStr());
-    transactions.forEach((t) => {
-      if (t.transactionDate) {
-        const d = new Date(t.transactionDate);
-        if (!isNaN(d.getTime())) {
-          const mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          set.add(mStr);
-        }
-      }
+    (Array.isArray(transactions) ? transactions : []).forEach((t) => {
+      const mStr = getTxMonthKey(t.transactionDate);
+      if (mStr) set.add(mStr);
     });
     return Array.from(set).sort().reverse();
   }, [transactions]);
@@ -276,14 +292,11 @@ export default function ExpensesView() {
 
   // Filtered Transactions based on Selected Month & Search Query
   const filteredTransactions = useMemo(() => {
-    return transactions.filter((t) => {
+    return (Array.isArray(transactions) ? transactions : []).filter((t) => {
       // Month Filter
-      if (selectedMonth !== 'all' && t.transactionDate) {
-        const d = new Date(t.transactionDate);
-        if (!isNaN(d.getTime())) {
-          const mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          if (mStr !== selectedMonth) return false;
-        }
+      if (selectedMonth !== 'all') {
+        const mStr = getTxMonthKey(t.transactionDate);
+        if (mStr !== selectedMonth) return false;
       }
 
       // Search Query
@@ -341,9 +354,11 @@ export default function ExpensesView() {
   const last3MonthsHistory = useMemo(() => {
     const list = [];
     const now = new Date();
+    const baseYear = now.getFullYear();
+    const baseMonth = now.getMonth(); // 0-indexed
 
     for (let i = 0; i < 3; i++) {
-      const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const targetDate = new Date(baseYear, baseMonth - i, 1);
       const y = targetDate.getFullYear();
       const m = String(targetDate.getMonth() + 1).padStart(2, '0');
       const key = `${y}-${m}`;
@@ -356,7 +371,8 @@ export default function ExpensesView() {
       let count = 0;
 
       (Array.isArray(transactions) ? transactions : []).forEach((t) => {
-        if (t.transactionDate && String(t.transactionDate).startsWith(key)) {
+        const txMonth = getTxMonthKey(t.transactionDate);
+        if (txMonth === key) {
           const amt = parseFloat(t.amount) || 0;
           if (t.type === 'income') {
             totalIncome += amt;
@@ -385,11 +401,15 @@ export default function ExpensesView() {
     }
 
     const total3MExpense = list.reduce((acc, item) => acc + item.totalExpense, 0);
+    const total3MIncome = list.reduce((acc, item) => acc + item.totalIncome, 0);
+    const total3MNet = total3MIncome - total3MExpense;
     const avg3MExpense = total3MExpense / 3;
 
     return {
       months: list,
       total3MExpense,
+      total3MIncome,
+      total3MNet,
       avg3MExpense
     };
   }, [transactions]);
@@ -450,7 +470,7 @@ export default function ExpensesView() {
   // Save Transaction (Create or Update)
   const handleSaveTransaction = async (e) => {
     e.preventDefault();
-    if (!formTitle.trim()) return;
+    if (!formTitle.trim() || isSubmittingExpense) return;
     const cleanAmount = parseFloat(formAmount) || 0;
 
     let finalCategory = formCategorySelect;
@@ -476,6 +496,7 @@ export default function ExpensesView() {
       notes: formNotes.trim()
     };
 
+    setIsSubmittingExpense(true);
     try {
       if (editingTransaction) {
         // PUT update
@@ -506,6 +527,8 @@ export default function ExpensesView() {
         setTransactions((prev) => [localNew, ...prev]);
       }
       setIsModalOpen(false);
+    } finally {
+      setIsSubmittingExpense(false);
     }
   };
 
@@ -559,31 +582,40 @@ export default function ExpensesView() {
               </div>
             </div>
 
-            {/* Top Action Buttons (Responsive Touch Grid) */}
-            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+            {/* Top Action Buttons (Responsive 2x2 on Mobile, Flex on Desktop) */}
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => exportExpensesToExcel(filteredTransactions, selectedMonth)}
+                className="py-2 px-2.5 sm:px-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] sm:text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm truncate"
+                title="Export Filtered Expenses & Cashflow to Excel"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="truncate">Export Excel</span>
+              </button>
+
               <button
                 onClick={() => setViewMode('analysis')}
-                className="flex-1 sm:flex-none py-2 px-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-rose-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 shrink-0"
+                className="py-2 px-2.5 sm:px-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-rose-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
                 title="Open Comprehensive Cashflow & Monthly Realized P&L Analytics"
               >
-                <PieChart className="w-3.5 h-3.5" />
-                <span>Analyze &gt;</span>
+                <PieChart className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Analyze &gt;</span>
               </button>
 
               <button
                 onClick={() => handleOpenAddModal('expense')}
-                className="py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
+                className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
               >
                 <ArrowDownLeft className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate"> Expense</span>
+                <span className="truncate">Expense</span>
               </button>
 
               <button
                 onClick={() => handleOpenAddModal('income')}
-                className="py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-emerald-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
+                className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-emerald-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
               >
                 <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate"> Income</span>
+                <span className="truncate">Income</span>
               </button>
             </div>
           </div>
@@ -592,7 +624,7 @@ export default function ExpensesView() {
           <div className="pt-2.5 border-t border-slate-800/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs">
             
             {/* Period Navigator Controls */}
-            <div className="flex items-center justify-between sm:justify-start gap-2">
+            <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap">
               <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 shadow-inner">
                 <button
                   onClick={() => handleStepMonth('prev')}
@@ -640,15 +672,15 @@ export default function ExpensesView() {
               </button>
             </div>
 
-            {/* Quick Mini Badges */}
-            <div className="flex items-center justify-between sm:justify-end gap-1.5 text-[10px] sm:text-[11px] font-mono">
-              <span className="px-2 py-0.5 rounded bg-rose-950/60 text-rose-300 border border-rose-500/30">
+            {/* Quick Mini Badges (Responsive 3-col on Mobile) */}
+            <div className="grid grid-cols-3 sm:flex sm:items-center gap-1.5 text-[10px] sm:text-[11px] font-mono text-center sm:text-left">
+              <span className="px-1.5 py-0.5 rounded bg-rose-950/60 text-rose-300 border border-rose-500/30 truncate">
                 Out: {formatCurrency(monthlyStats.totalExpense)}
               </span>
-              <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-500/30">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-500/30 truncate">
                 In: {formatCurrency(monthlyStats.totalIncome)}
               </span>
-              <span className={`px-2 py-0.5 rounded font-bold border ${
+              <span className={`px-1.5 py-0.5 rounded font-bold border truncate ${
                 monthlyStats.netSavings >= 0
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                   : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
@@ -661,44 +693,59 @@ export default function ExpensesView() {
       </div>
 
       {/* 2. LAST 3 MONTHS EXPENSE & CASHFLOW HISTORY LOGS */}
-      <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3.5 sm:p-5 shadow-xl space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+      <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3.5 sm:p-5 shadow-xl space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-indigo-400" />
-            <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider font-mono">
-              Last 3 Months Expense History Log
-            </h3>
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400 shrink-0" />
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider font-mono">
+                3-Month Expense & Cashflow Log
+              </h3>
+              <p className="text-[10px] sm:text-[11px] text-slate-400">
+                Comparison of outflows, inflows, and net balances
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-[10px] sm:text-[11px] font-mono text-slate-400 flex-wrap">
-            <span>3-Month Outflow Avg: <strong className="text-rose-400">{formatCurrency(last3MonthsHistory.avg3MExpense)}</strong></span>
-            <span>•</span>
-            <span>Total 3M Spent: <strong className="text-slate-200">{formatCurrency(last3MonthsHistory.total3MExpense)}</strong></span>
+          <div className="grid grid-cols-3 sm:flex sm:items-center gap-1.5 text-[10px] sm:text-xs font-mono text-slate-300 text-center sm:text-left w-full sm:w-auto">
+            <span className="px-1.5 py-0.5 rounded-md bg-slate-950 border border-slate-800 truncate">
+              Spent: <strong className="text-rose-400">{formatCurrency(last3MonthsHistory.total3MExpense)}</strong>
+            </span>
+            <span className="px-1.5 py-0.5 rounded-md bg-slate-950 border border-slate-800 truncate">
+              Income: <strong className="text-emerald-400">+{formatCurrency(last3MonthsHistory.total3MIncome)}</strong>
+            </span>
+            <span className={`px-1.5 py-0.5 rounded-md font-bold border truncate ${
+              last3MonthsHistory.total3MNet >= 0
+                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/30'
+                : 'bg-rose-950/60 text-rose-300 border-rose-500/30'
+            }`}>
+              Net: {last3MonthsHistory.total3MNet >= 0 ? '+' : ''}{formatCurrency(last3MonthsHistory.total3MNet)}
+            </span>
           </div>
         </div>
 
         {/* 3 Interactive Month History Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {last3MonthsHistory.months.map((mItem) => {
             const isCurrentFilter = selectedMonth === mItem.key;
             return (
               <div
                 key={mItem.key}
                 onClick={() => setSelectedMonth(mItem.key)}
-                className={`p-3 sm:p-4 rounded-xl border transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-2.5 relative overflow-hidden group ${
+                className={`p-3.5 sm:p-4 rounded-xl border transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-3 relative overflow-hidden group ${
                   isCurrentFilter
-                    ? 'bg-slate-900 border-indigo-500 shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-500/50'
+                    ? 'bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950/30 border-indigo-500 shadow-xl shadow-indigo-500/10 ring-1 ring-indigo-500/50'
                     : 'bg-slate-950/70 hover:bg-slate-950 border-slate-800/80 hover:border-slate-700'
                 }`}
               >
                 {/* Top Badge and Month Name */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-xs sm:text-sm text-white font-mono">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm sm:text-base text-white font-mono">
                       {mItem.label}
                     </span>
-                    <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-md border ${
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md border ${
                       mItem.index === 0
-                        ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                        ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
                         : 'bg-slate-800 text-slate-400 border-slate-700'
                     }`}>
                       {mItem.tag}
@@ -706,38 +753,56 @@ export default function ExpensesView() {
                   </div>
 
                   {isCurrentFilter && (
-                    <span className="flex items-center gap-1 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 animate-pulse">
+                    <span className="flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
                       <CheckCircle2 className="w-3 h-3 text-indigo-400" />
                       <span>Active</span>
                     </span>
                   )}
                 </div>
 
-                {/* Main Metric: Spent & Items */}
-                <div className="flex items-baseline justify-between pt-1">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-medium block">Total Spent</span>
-                    <div className="text-base sm:text-xl font-black font-mono tracking-tight text-rose-400">
+                {/* 2-Column Inflow vs Outflow Metric */}
+                <div className="grid grid-cols-2 gap-2 pt-0.5">
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/80">
+                    <span className="text-[10px] text-rose-300/80 uppercase font-semibold tracking-wide block">
+                      Total Spent
+                    </span>
+                    <div className="text-sm sm:text-base font-black font-mono tracking-tight text-rose-400 truncate mt-0.5">
                       -{formatCurrency(mItem.totalExpense)}
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-400 font-medium block">Inflow / Net</span>
-                    <div className="text-[11px] sm:text-xs font-mono font-bold text-emerald-400">
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/80">
+                    <span className="text-[10px] text-emerald-300/80 uppercase font-semibold tracking-wide block">
+                      Total Income
+                    </span>
+                    <div className="text-sm sm:text-base font-black font-mono tracking-tight text-emerald-400 truncate mt-0.5">
                       +{formatCurrency(mItem.totalIncome)}
-                    </div>
-                    <div className={`text-[10px] font-mono font-bold ${mItem.netSavings >= 0 ? 'text-cyan-300' : 'text-rose-400'}`}>
-                      Net: {mItem.netSavings >= 0 ? '+' : ''}{formatCurrency(mItem.netSavings)}
                     </div>
                   </div>
                 </div>
 
+                {/* Prominent, Highly Readable Net Savings Banner */}
+                <div className={`px-3 py-2 rounded-xl border flex items-center justify-between text-xs font-mono font-bold ${
+                  mItem.netSavings >= 0
+                    ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                    : 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                }`}>
+                  <span className="text-[11px] font-medium opacity-90">
+                    {mItem.netSavings >= 0 ? 'Net Surplus / Saved:' : 'Net Deficit:'}
+                  </span>
+                  <span className="text-xs sm:text-sm font-black tracking-tight">
+                    {mItem.netSavings >= 0 ? '+' : ''}{formatCurrency(mItem.netSavings)}
+                    {mItem.savingsRate !== null && mItem.totalIncome > 0 && (
+                      <span className="text-[10px] font-normal ml-1 opacity-80">({mItem.savingsRate}%)</span>
+                    )}
+                  </span>
+                </div>
+
                 {/* Bottom CTA info */}
                 <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
-                  <span>{mItem.count} expense items</span>
+                  <span className="font-mono">{mItem.count} recorded items</span>
                   <span className={`font-semibold group-hover:underline ${isCurrentFilter ? 'text-indigo-300' : 'text-slate-500 group-hover:text-slate-300'}`}>
-                    {isCurrentFilter ? 'Viewing in Ledger' : 'Click to View →'}
+                    {isCurrentFilter ? 'Selected Month ✓' : 'Click to View →'}
                   </span>
                 </div>
               </div>
@@ -1427,20 +1492,31 @@ export default function ExpensesView() {
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                 <button
                   type="button"
+                  disabled={isSubmittingExpense}
                   onClick={() => setIsModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className={`px-4 py-2 rounded-xl text-white text-xs font-bold transition shadow-lg active:scale-95 ${
+                  disabled={isSubmittingExpense}
+                  className={`px-4 py-2 rounded-xl text-white text-xs font-bold transition shadow-lg active:scale-95 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
                     formType === 'income'
                       ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-600/30'
                       : 'bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 shadow-rose-600/30'
                   }`}
                 >
-                  {editingTransaction ? 'Save Changes' : formType === 'income' ? 'Record Income (+)' : 'Record Expense (-)'}
+                  {isSubmittingExpense && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>
+                    {isSubmittingExpense
+                      ? 'Saving...'
+                      : editingTransaction
+                      ? 'Save Changes'
+                      : formType === 'income'
+                      ? 'Record Income (+)'
+                      : 'Record Expense (-)'}
+                  </span>
                 </button>
               </div>
             </form>

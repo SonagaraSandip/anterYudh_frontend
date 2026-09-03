@@ -29,7 +29,8 @@ import {
   Hash,
   FolderLock,
   Palette,
-  CheckCheck
+  CheckCheck,
+  RefreshCw
 } from 'lucide-react';
 
 import cacheManager from '../utils/cacheManager';
@@ -83,6 +84,7 @@ export default function NotesView() {
 
   // Add/Edit Note Modal
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+  const [isSubmittingNote, setIsSubmittingNote] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
   const [noteFormTitle, setNoteFormTitle] = useState('');
   const [noteFormContent, setNoteFormContent] = useState('');
@@ -104,6 +106,7 @@ export default function NotesView() {
     }
   });
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
+  const [isSubmittingBuy, setIsSubmittingBuy] = useState(false);
   const [editingBuyItem, setEditingBuyItem] = useState(null);
   const [newBuyItem, setNewBuyItem] = useState({
     title: '',
@@ -230,7 +233,7 @@ export default function NotesView() {
   // Save Note (Create or Update)
   const handleSaveNote = async (e) => {
     e.preventDefault();
-    if (!noteFormTitle.trim()) return;
+    if (!noteFormTitle.trim() || isSubmittingNote) return;
 
     const payload = {
       title: noteFormTitle.trim(),
@@ -241,43 +244,48 @@ export default function NotesView() {
       color: noteFormColor
     };
 
-    if (editingNote) {
-      // Update
-      const updatedList = notes.map((n) =>
-        n.id === editingNote.id ? { ...n, ...payload, updatedAt: new Date().toISOString() } : n
-      );
-      setNotes(updatedList);
-      localStorage.setItem('antaryudh_cached_notes', JSON.stringify(updatedList));
+    setIsSubmittingNote(true);
+    try {
+      if (editingNote) {
+        // Update
+        const updatedList = notes.map((n) =>
+          n.id === editingNote.id ? { ...n, ...payload, updatedAt: new Date().toISOString() } : n
+        );
+        setNotes(updatedList);
+        localStorage.setItem('antaryudh_cached_notes', JSON.stringify(updatedList));
 
-      try {
-        await axios.put(`${API_BASE}/notes/${editingNote.id}`, payload);
-      } catch (err) {
-        console.warn('Failed to update note on backend:', err.message);
-      }
-    } else {
-      // Create
-      const tempId = Date.now();
-      const newNote = {
-        id: tempId,
-        ...payload,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      const updatedList = [newNote, ...notes];
-      setNotes(updatedList);
-      localStorage.setItem('antaryudh_cached_notes', JSON.stringify(updatedList));
-
-      try {
-        const res = await axios.post(`${API_BASE}/notes`, payload);
-        if (res.data && res.data.id) {
-          setNotes((prev) => prev.map((n) => (n.id === tempId ? res.data : n)));
+        try {
+          await axios.put(`${API_BASE}/notes/${editingNote.id}`, payload);
+        } catch (err) {
+          console.warn('Failed to update note on backend:', err.message);
         }
-      } catch (err) {
-        console.warn('Failed to save note to backend:', err.message);
-      }
-    }
+      } else {
+        // Create
+        const tempId = Date.now();
+        const newNote = {
+          id: tempId,
+          ...payload,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        const updatedList = [newNote, ...notes];
+        setNotes(updatedList);
+        localStorage.setItem('antaryudh_cached_notes', JSON.stringify(updatedList));
 
-    setIsNoteModalOpen(false);
+        try {
+          const res = await axios.post(`${API_BASE}/notes`, payload);
+          if (res.data && res.data.id) {
+            setNotes((prev) => prev.map((n) => (n.id === tempId ? res.data : n)));
+          }
+        } catch (err) {
+          console.warn('Failed to save note to backend:', err.message);
+        }
+      }
+
+      setIsNoteModalOpen(false);
+    } finally {
+      setIsSubmittingNote(false);
+    }
   };
 
   // Delete Note
@@ -344,7 +352,7 @@ export default function NotesView() {
 
   const handleSaveBuyItem = async (e) => {
     e.preventDefault();
-    if (!newBuyItem.title.trim()) return;
+    if (!newBuyItem.title.trim() || isSubmittingBuy) return;
 
     const payload = {
       title: newBuyItem.title.trim(),
@@ -355,35 +363,39 @@ export default function NotesView() {
       status: 'planning'
     };
 
-    if (editingBuyItem) {
-      const updated = buyItems.map((i) => (i.id === editingBuyItem.id ? { ...i, ...payload } : i));
-      setBuyItems(updated);
-      localStorage.setItem('antaryudh_cached_buy_items', JSON.stringify(updated));
+    setIsSubmittingBuy(true);
+    try {
+      if (editingBuyItem) {
+        const updated = buyItems.map((i) => (i.id === editingBuyItem.id ? { ...i, ...payload } : i));
+        setBuyItems(updated);
+        localStorage.setItem('antaryudh_cached_buy_items', JSON.stringify(updated));
 
-      try {
-        await axios.put(`${API_BASE}/buy/${editingBuyItem.id}`, payload);
-      } catch (err) {
-        console.warn('Failed to update buy item:', err.message);
-      }
-    } else {
-      const tempId = Date.now();
-      const item = { id: tempId, ...payload };
-      const updated = [item, ...buyItems];
-      setBuyItems(updated);
-      localStorage.setItem('antaryudh_cached_buy_items', JSON.stringify(updated));
-
-      try {
-        const res = await axios.post(`${API_BASE}/buy`, payload);
-        if (res.data && res.data.id) {
-          setBuyItems((prev) => prev.map((i) => (i.id === tempId ? res.data : i)));
+        try {
+          await axios.put(`${API_BASE}/buy/${editingBuyItem.id}`, payload);
+        } catch (err) {
+          console.warn('Failed to update buy item:', err.message);
         }
-      } catch (err) {
-        console.warn('Failed to save buy item to backend:', err.message);
-      }
-    }
+      } else {
+        const tempId = Date.now();
+        const item = { id: tempId, ...payload };
+        const updated = [item, ...buyItems];
+        setBuyItems(updated);
+        localStorage.setItem('antaryudh_cached_buy_items', JSON.stringify(updated));
 
-    setNewBuyItem({ title: '', category: 'Tech & Gear', estimatedCost: '', savedAmount: '', priority: 'High' });
-    setIsBuyModalOpen(false);
+        try {
+          const res = await axios.post(`${API_BASE}/buy`, payload);
+          if (res.data && res.data.id) {
+            setBuyItems((prev) => prev.map((i) => (i.id === tempId ? res.data : i)));
+          }
+        } catch (err) {
+          console.warn('Failed to save buy item to backend:', err.message);
+        }
+      }
+
+      setIsBuyModalOpen(false);
+    } finally {
+      setIsSubmittingBuy(false);
+    }
   };
 
   const handleDeleteBuyItem = async (id) => {
@@ -1019,16 +1031,19 @@ export default function NotesView() {
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                 <button
                   type="button"
+                  disabled={isSubmittingNote}
                   onClick={() => setIsNoteModalOpen(false)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30"
+                  disabled={isSubmittingNote}
+                  className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {editingNote ? 'Save Changes' : 'Create Note'}
+                  {isSubmittingNote && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isSubmittingNote ? 'Saving Note...' : editingNote ? 'Save Changes' : 'Create Note'}</span>
                 </button>
               </div>
             </form>
@@ -1083,7 +1098,12 @@ export default function NotesView() {
                 <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
                 <span>{editingBuyItem ? 'Edit Planned Item' : 'Add Planned Item'}</span>
               </h3>
-              <button onClick={() => setIsBuyModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button 
+                type="button"
+                disabled={isSubmittingBuy}
+                onClick={() => setIsBuyModalOpen(false)} 
+                className="text-slate-400 hover:text-white disabled:opacity-50"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1097,7 +1117,8 @@ export default function NotesView() {
                   placeholder="e.g. Sony Alpha Camera"
                   value={newBuyItem.title}
                   onChange={(e) => setNewBuyItem({ ...newBuyItem, title: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  disabled={isSubmittingBuy}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 disabled:opacity-50"
                 />
               </div>
 
@@ -1111,7 +1132,8 @@ export default function NotesView() {
                     onFocus={(e) => e.target.select()}
                     value={newBuyItem.estimatedCost}
                     onChange={(e) => setNewBuyItem({ ...newBuyItem, estimatedCost: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                    disabled={isSubmittingBuy}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -1122,7 +1144,8 @@ export default function NotesView() {
                     onFocus={(e) => e.target.select()}
                     value={newBuyItem.savedAmount}
                     onChange={(e) => setNewBuyItem({ ...newBuyItem, savedAmount: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                    disabled={isSubmittingBuy}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -1133,7 +1156,8 @@ export default function NotesView() {
                   <select
                     value={newBuyItem.category}
                     onChange={(e) => setNewBuyItem({ ...newBuyItem, category: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                    disabled={isSubmittingBuy}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500 disabled:opacity-50"
                   >
                     <option value="Tech & Gear">Tech & Gear</option>
                     <option value="Precious Metals">Precious Metals</option>
@@ -1147,7 +1171,8 @@ export default function NotesView() {
                   <select
                     value={newBuyItem.priority}
                     onChange={(e) => setNewBuyItem({ ...newBuyItem, priority: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                    disabled={isSubmittingBuy}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500 disabled:opacity-50"
                   >
                     <option value="High">High</option>
                     <option value="Medium">Medium</option>
@@ -1159,16 +1184,19 @@ export default function NotesView() {
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                 <button
                   type="button"
+                  disabled={isSubmittingBuy}
                   onClick={() => setIsBuyModalOpen(false)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition shadow-lg shadow-amber-600/30"
+                  disabled={isSubmittingBuy}
+                  className="px-4 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition shadow-lg shadow-amber-600/30 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {editingBuyItem ? 'Save Changes' : 'Add Item'}
+                  {isSubmittingBuy && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isSubmittingBuy ? 'Saving...' : editingBuyItem ? 'Save Changes' : 'Add Item'}</span>
                 </button>
               </div>
             </form>

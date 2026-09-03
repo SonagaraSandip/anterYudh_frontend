@@ -45,10 +45,12 @@ import {
   PlusCircle,
   MinusCircle,
   Hourglass,
-  Sparkles
+  Sparkles,
+  Download
 } from 'lucide-react';
 import TradingAnalysis from './TradingAnalysis';
 import cacheManager from '../utils/cacheManager';
+import { exportTradesToExcel } from '../utils/excelExporter';
 
 const API_BASE = '/api/trades';
 const PAGE_SIZE = 10;
@@ -99,6 +101,9 @@ export default function TradingView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTrade, setEditingTrade] = useState(null);
   const [modalMode, setModalMode] = useState('simple'); // 'simple' | 'multileg'
+  const [isSubmittingTrade, setIsSubmittingTrade] = useState(false);
+  const [isSubmittingPartialSell, setIsSubmittingPartialSell] = useState(false);
+  const [isSubmittingPartialBuy, setIsSubmittingPartialBuy] = useState(false);
 
   // Form Fields State
   const [formTradeType, setFormTradeType] = useState('stock'); // 'stock' | 'intraday'
@@ -628,8 +633,9 @@ export default function TradingView() {
   // Submit Quick Partial Sell
   const handleSubmitPartialSell = async (e) => {
     e.preventDefault();
-    if (!partialSellTarget) return;
+    if (!partialSellTarget || isSubmittingPartialSell) return;
 
+    setIsSubmittingPartialSell(true);
     const payload = {
       date: partialSellDate,
       quantity: parseInt(partialSellQty, 10) || 1,
@@ -662,6 +668,7 @@ export default function TradingView() {
       };
       setTrades((prev) => prev.map((t) => (t.id === trade.id ? updated : t)));
     } finally {
+      setIsSubmittingPartialSell(false);
       setPartialSellTarget(null);
     }
   };
@@ -669,8 +676,9 @@ export default function TradingView() {
   // Submit Quick Partial Buy (Accumulate)
   const handleSubmitPartialBuy = async (e) => {
     e.preventDefault();
-    if (!partialBuyTarget) return;
+    if (!partialBuyTarget || isSubmittingPartialBuy) return;
 
+    setIsSubmittingPartialBuy(true);
     const payload = {
       date: partialBuyDate,
       quantity: parseInt(partialBuyQty, 10) || 1,
@@ -703,6 +711,7 @@ export default function TradingView() {
       };
       setTrades((prev) => prev.map((t) => (t.id === trade.id ? updated : t)));
     } finally {
+      setIsSubmittingPartialBuy(false);
       setPartialBuyTarget(null);
     }
   };
@@ -884,6 +893,7 @@ export default function TradingView() {
       };
     }
 
+    setIsSubmittingTrade(true);
     try {
       if (editingTrade) {
         const res = await axios.put(`${API_BASE}/${editingTrade.id}`, payload);
@@ -905,6 +915,8 @@ export default function TradingView() {
         setTrades((prev) => [{ id: Date.now(), ...payload }, ...prev]);
       }
       setIsModalOpen(false);
+    } finally {
+      setIsSubmittingTrade(false);
     }
   };
 
@@ -951,7 +963,7 @@ export default function TradingView() {
     return (
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col font-sans transition-all duration-300">
         {/* Collapsible Table Header Section */}
-        <div className="p-3 sm:p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-slate-800 flex items-center justify-between gap-2 select-none">
+        <div className="p-3 sm:p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 select-none">
           <div
             onClick={onToggleExpand}
             className="flex items-center gap-2 sm:gap-2.5 min-w-0 cursor-pointer group flex-1"
@@ -964,19 +976,19 @@ export default function TradingView() {
             >
               <Icon className="w-4 h-4" />
             </div>
-            <div className="min-w-0 flex items-center gap-2 flex-wrap">
+            <div className="min-w-0 flex items-center gap-1.5 sm:gap-2 flex-wrap flex-1">
               <h3 className="text-xs sm:text-base font-bold text-white tracking-tight truncate group-hover:text-cyan-300 transition">
                 {title}
               </h3>
 
               <span className="text-[9px] sm:text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-semibold shrink-0">
-                {totalItems} trades
+                {totalItems}
               </span>
 
               {/* Category Realized P/L Pill */}
               <span
                 className={clsx(
-                  'text-[9px] sm:text-[10px] font-mono px-2 py-0.2 rounded-full font-bold border shrink-0',
+                  'text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.2 rounded-full font-bold border shrink-0 truncate',
                   categoryPl > 0 && 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
                   categoryPl < 0 && 'bg-rose-500/10 text-rose-400 border-rose-500/20',
                   categoryPl === 0 && 'bg-slate-800 text-slate-400 border-slate-700'
@@ -987,7 +999,7 @@ export default function TradingView() {
               </span>
             </div>
 
-            <div className="p-1 rounded-lg bg-slate-800 text-slate-400 group-hover:text-white group-hover:bg-slate-700 transition ml-1">
+            <div className="p-1 rounded-lg bg-slate-800 text-slate-400 group-hover:text-white group-hover:bg-slate-700 transition shrink-0 ml-auto sm:ml-1">
               <ChevronDown
                 className={clsx(
                   'w-4 h-4 transition-transform duration-300',
@@ -997,13 +1009,25 @@ export default function TradingView() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                exportTradesToExcel(tradeList);
+              }}
+              title={`Download ${title} in Excel (.xlsx)`}
+              className="py-1.5 px-2.5 rounded-xl bg-slate-800/90 hover:bg-emerald-950/60 text-slate-300 hover:text-emerald-300 text-[11px] sm:text-xs font-semibold border border-slate-700 hover:border-emerald-500/40 transition active:scale-95 flex items-center justify-center gap-1 shadow-sm truncate"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="truncate">Export</span>
+            </button>
+
             <button
               onClick={() => handleOpenAddModal(isStockType ? 'stock' : 'intraday')}
-              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] sm:text-xs font-semibold border border-slate-700 transition active:scale-95 flex items-center gap-1 shadow-sm shrink-0"
+              className="py-1.5 px-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-[11px] sm:text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1 shadow-md shadow-cyan-600/20 truncate"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Trade</span>
+              <Plus className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Trade</span>
             </button>
           </div>
         </div>
@@ -1028,7 +1052,7 @@ export default function TradingView() {
                     onClick={() => handleOpenAddModal(isStockType ? 'stock' : 'intraday')}
                     className="text-cyan-400 hover:underline font-bold text-xs"
                   >
-                    + Log trade
+                     Log trade
                   </button>
                 </div>
               ) : (
@@ -1650,31 +1674,40 @@ export default function TradingView() {
               </div>
             </div>
 
-            {/* Action Buttons: Analyze > + Stock Trade + Intraday */}
-            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+            {/* Action Buttons: Export + Analyze > + Stock Trade + Intraday (Responsive 2x2 on Mobile, Flex on Desktop) */}
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => exportTradesToExcel(trades)}
+                title="Download entire Trading Journal & Ledger in Excel (.xlsx)"
+                className="py-2 px-2.5 sm:px-3 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 text-[11px] sm:text-xs font-bold shadow-sm transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="truncate">Export Excel</span>
+              </button>
+
               <button
                 onClick={() => setViewMode('analysis')}
-                className="flex-1 sm:flex-none py-2 px-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-indigo-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 shrink-0"
+                className="py-2 px-2.5 sm:px-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-indigo-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
                 title="Open Comprehensive Trade Analytics & Strategy Matrix"
               >
-                <PieChart className="w-3.5 h-3.5" />
-                <span>Analyze &gt;</span>
+                <PieChart className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Analyze &gt;</span>
               </button>
 
               <button
                 onClick={() => handleOpenAddModal('stock')}
-                className="py-2 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-blue-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
+                className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-blue-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
               >
                 <TrendingUp className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Stock Trade</span>
+                <span className="truncate"> Stock</span>
               </button>
 
               <button
                 onClick={() => handleOpenAddModal('intraday')}
-                className="py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-cyan-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
+                className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-cyan-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
               >
                 <Zap className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Intraday</span>
+                <span className="truncate"> Intraday</span>
               </button>
             </div>
           </div>
@@ -2362,21 +2395,30 @@ export default function TradingView() {
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800 shrink-0">
                   <button
                     type="button"
+                    disabled={isSubmittingTrade}
                     onClick={() => setIsModalOpen(false)}
-                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
+                    disabled={isSubmittingTrade}
                     className={clsx(
-                      'px-4 py-2 rounded-xl text-white text-xs font-bold transition shadow-lg active:scale-95',
+                      'px-4 py-2 rounded-xl text-white text-xs font-bold transition shadow-lg active:scale-95 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed',
                       formTradeType === 'intraday'
                         ? 'bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 shadow-cyan-600/30'
                         : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-600/30'
                     )}
                   >
-                    {editingTrade ? 'Save Changes' : 'Record Trade'}
+                    {isSubmittingTrade && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>
+                      {isSubmittingTrade
+                        ? 'Saving...'
+                        : editingTrade
+                        ? 'Save Changes'
+                        : 'Record Trade'}
+                    </span>
                   </button>
                 </div>
               </form>
@@ -2525,16 +2567,19 @@ export default function TradingView() {
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                   <button
                     type="button"
+                    disabled={isSubmittingPartialSell}
                     onClick={() => setPartialSellTarget(null)}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700 transition"
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700 transition disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md shadow-cyan-600/30 transition active:scale-95"
+                    disabled={isSubmittingPartialSell}
+                    className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md shadow-cyan-600/30 transition active:scale-95 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Confirm Sell Leg
+                    {isSubmittingPartialSell && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{isSubmittingPartialSell ? 'Executing Sell...' : 'Confirm Sell Leg'}</span>
                   </button>
                 </div>
               </form>
@@ -2549,7 +2594,7 @@ export default function TradingView() {
         createPortal(
           <div
             onClick={(e) => {
-              if (e.target === e.currentTarget) setPartialBuyTarget(null);
+              if (e.target === e.currentTarget && !isSubmittingPartialBuy) setPartialBuyTarget(null);
             }}
             className="fixed inset-0 z-[99999] flex items-center justify-center p-3 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto"
             style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
@@ -2581,7 +2626,8 @@ export default function TradingView() {
                     required
                     value={partialBuyDate}
                     onChange={(e) => setPartialBuyDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-blue-500"
+                    disabled={isSubmittingPartialBuy}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
                   />
                 </div>
 
@@ -2597,7 +2643,8 @@ export default function TradingView() {
                       placeholder="1"
                       value={partialBuyQty}
                       onChange={(e) => setPartialBuyQty(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:border-blue-500"
+                      disabled={isSubmittingPartialBuy}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
                       autoFocus
                     />
                   </div>
@@ -2613,7 +2660,8 @@ export default function TradingView() {
                       placeholder="0.00"
                       value={partialBuyPrice}
                       onChange={(e) => setPartialBuyPrice(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:border-blue-500"
+                      disabled={isSubmittingPartialBuy}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
                     />
                   </div>
                 </div>
@@ -2629,7 +2677,8 @@ export default function TradingView() {
                       placeholder="20"
                       value={partialBuyCharges}
                       onChange={(e) => setPartialBuyCharges(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-blue-500"
+                      disabled={isSubmittingPartialBuy}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
                     />
                   </div>
 
@@ -2642,7 +2691,8 @@ export default function TradingView() {
                       placeholder="e.g. Dip Buy"
                       value={partialBuyNotes}
                       onChange={(e) => setPartialBuyNotes(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
+                      disabled={isSubmittingPartialBuy}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
                     />
                   </div>
                 </div>
@@ -2670,16 +2720,19 @@ export default function TradingView() {
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                   <button
                     type="button"
+                    disabled={isSubmittingPartialBuy}
                     onClick={() => setPartialBuyTarget(null)}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700 transition"
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700 transition disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/30 transition active:scale-95"
+                    disabled={isSubmittingPartialBuy}
+                    className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/30 transition active:scale-95 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Confirm Buy Leg
+                    {isSubmittingPartialBuy && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{isSubmittingPartialBuy ? 'Executing Buy...' : 'Confirm Buy Leg'}</span>
                   </button>
                 </div>
               </form>

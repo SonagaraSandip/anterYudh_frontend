@@ -24,8 +24,10 @@ import {
   ChevronUp,
   Smartphone,
   Calendar,
-  Users
+  Users,
+  Download
 } from 'lucide-react';
+import { exportIposToExcel } from '../utils/excelExporter';
 
 const API_BASE = '/api/ipos';
 
@@ -90,6 +92,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
   // Modals & form state
   const [isAddIpoOpen, setIsAddIpoOpen] = useState(false);
   const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
+  const [isSubmittingIpo, setIsSubmittingIpo] = useState(false);
+  const [isSubmittingPerson, setIsSubmittingPerson] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
   
   // Confirmation modal state before unchecking Allotted
@@ -229,19 +233,24 @@ export default function IpoDashboard({ isEmbedded = false }) {
   };
 
   // Add a new dynamic Person Column
-  const handleAddPerson = (e) => {
+  const handleAddPerson = async (e) => {
     e.preventDefault();
     const trimmed = newPersonName.trim();
-    if (!trimmed) return;
+    if (!trimmed || isSubmittingPerson) return;
 
-    if (!persons.some((p) => isSamePerson(p, trimmed))) {
-      const updatedPersons = [...persons, trimmed];
-      setPersons(updatedPersons);
-      localStorage.setItem('antaryudh_demat_persons', JSON.stringify(updatedPersons));
-      ensurePersonAcrossIpos(trimmed);
+    setIsSubmittingPerson(true);
+    try {
+      if (!persons.some((p) => isSamePerson(p, trimmed))) {
+        const updatedPersons = [...persons, trimmed];
+        setPersons(updatedPersons);
+        localStorage.setItem('antaryudh_demat_persons', JSON.stringify(updatedPersons));
+        ensurePersonAcrossIpos(trimmed);
+      }
+      setNewPersonName('');
+      setIsAddPersonOpen(false);
+    } finally {
+      setIsSubmittingPerson(false);
     }
-    setNewPersonName('');
-    setIsAddPersonOpen(false);
   };
 
   // Prompt confirmation dialog before deleting a Person / Demat Account column
@@ -493,8 +502,9 @@ export default function IpoDashboard({ isEmbedded = false }) {
   // Create a new IPO row
   const handleCreateIpo = async (e) => {
     e.preventDefault();
-    if (!newIpoData.ipoName.trim()) return;
+    if (!newIpoData.ipoName.trim() || isSubmittingIpo) return;
 
+    setIsSubmittingIpo(true);
     try {
       const payload = {
         ipoName: newIpoData.ipoName.trim(),
@@ -530,6 +540,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
     } catch (err) {
       console.error('Failed to create IPO entry:', err);
       setErrorMsg('Failed to create IPO on backend server.');
+    } finally {
+      setIsSubmittingIpo(false);
     }
   };
 
@@ -689,27 +701,38 @@ export default function IpoDashboard({ isEmbedded = false }) {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
-            <button
-              onClick={() => setIsAddPersonOpen(true)}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 transition-all shadow-sm active:scale-95 whitespace-nowrap"
-            >
-              <UserPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
-              <span> Add Person</span>
-            </button>
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap w-full md:w-auto">
+            <div className="grid grid-cols-3 sm:flex sm:items-center gap-2 w-full sm:w-auto flex-1">
+              <button
+                onClick={() => exportIposToExcel(ipos)}
+                title="Download IPO applied & allotted details in Excel (.xlsx)"
+                className="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-2 text-xs font-semibold rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 transition-all shadow-sm active:scale-95 truncate"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="truncate">Export</span>
+              </button>
 
-            <button
-              onClick={() => setIsAddIpoOpen(true)}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-lg shadow-cyan-600/30 transition-all active:scale-95 whitespace-nowrap"
-            >
-              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span> Add IPO</span>
-            </button>
+              <button
+                onClick={() => setIsAddPersonOpen(true)}
+                className="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 transition-all shadow-sm active:scale-95 truncate"
+              >
+                <UserPlus className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="truncate"> Person</span>
+              </button>
+
+              <button
+                onClick={() => setIsAddIpoOpen(true)}
+                className="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-lg shadow-cyan-600/30 transition-all active:scale-95 truncate"
+              >
+                <Plus className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate"> IPO</span>
+              </button>
+            </div>
 
             <button
               onClick={fetchIpos}
               title="Refresh Data"
-              className="p-2 text-slate-400 hover:text-white rounded-lg bg-slate-800 border border-slate-700 hover:border-slate-600 transition-all active:rotate-180 shrink-0"
+              className="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-800 border border-slate-700 hover:border-slate-600 transition-all active:rotate-180 shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -1779,9 +1802,11 @@ export default function IpoDashboard({ isEmbedded = false }) {
                   />
                   <button
                     type="submit"
-                    className="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition shrink-0"
+                    disabled={isSubmittingPerson}
+                    className="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-md shadow-indigo-600/30 transition shrink-0 flex items-center gap-1.5"
                   >
-                    Add
+                    {isSubmittingPerson && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{isSubmittingPerson ? 'Adding...' : 'Add'}</span>
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">
@@ -1853,7 +1878,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
       {/* Modal: Add New IPO Entry (Rendered in Body Portal for True Viewport Centering) */}
       {isAddIpoOpen && typeof document !== 'undefined' && createPortal(
         <div 
-          onClick={() => setIsAddIpoOpen(false)}
+          onClick={() => !isSubmittingIpo && setIsAddIpoOpen(false)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
         >
           <div 
@@ -1867,8 +1892,9 @@ export default function IpoDashboard({ isEmbedded = false }) {
               </div>
               <button
                 type="button"
+                disabled={isSubmittingIpo}
                 onClick={() => setIsAddIpoOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition disabled:opacity-40"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1885,7 +1911,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
                   placeholder="e.g. Swiggy Ltd. / NTPC Green"
                   value={newIpoData.ipoName}
                   onChange={(e) => setNewIpoData({ ...newIpoData, ipoName: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  disabled={isSubmittingIpo}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                 />
               </div>
 
@@ -1899,7 +1926,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
                   onFocus={(e) => e.target.select()}
                   value={newIpoData.lotCost}
                   onChange={(e) => setNewIpoData({ ...newIpoData, lotCost: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  disabled={isSubmittingIpo}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                 />
               </div>
 
@@ -1912,7 +1940,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
                   placeholder="e.g. GMP +45%, Mainboard, Demat notes..."
                   value={newIpoData.notes}
                   onChange={(e) => setNewIpoData({ ...newIpoData, notes: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  disabled={isSubmittingIpo}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                 />
               </div>
 
@@ -1927,7 +1956,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
                     onFocus={(e) => e.target.select()}
                     value={newIpoData.profitLoss}
                     onChange={(e) => setNewIpoData({ ...newIpoData, profitLoss: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    disabled={isSubmittingIpo}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -1937,7 +1967,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
                   <select
                     value={newIpoData.status}
                     onChange={(e) => setNewIpoData({ ...newIpoData, status: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                    disabled={isSubmittingIpo}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                   >
                     <option value="applied">Applied</option>
                     <option value="allotted">Allotted</option>
@@ -1955,23 +1986,27 @@ export default function IpoDashboard({ isEmbedded = false }) {
                   type="date"
                   value={newIpoData.createdAt}
                   onChange={(e) => setNewIpoData({ ...newIpoData, createdAt: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                  disabled={isSubmittingIpo}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                 />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
+                  disabled={isSubmittingIpo}
                   onClick={() => setIsAddIpoOpen(false)}
-                  className="px-4 py-2 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                  className="px-4 py-2 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition"
+                  disabled={isSubmittingIpo}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-md shadow-indigo-600/30 transition flex items-center gap-1.5"
                 >
-                  Create IPO Row
+                  {isSubmittingIpo && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isSubmittingIpo ? 'Saving IPO...' : 'Create IPO Row'}</span>
                 </button>
               </div>
             </form>
