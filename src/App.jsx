@@ -18,8 +18,10 @@ import {
   Loader2
 } from 'lucide-react';
 import axios from 'axios';
+import { Cloud } from 'lucide-react';
 import MainDashboard from './components/MainDashboard';
 import ConnectingScreen from './components/ConnectingScreen';
+import BackupModal from './components/BackupModal';
 
 // Lazy load heavyweight tab components so only Dashboard is loaded on initial render
 const IpoDashboard = lazy(() => import('./components/IpoDashboard'));
@@ -70,6 +72,7 @@ function App() {
   const [activeTab, setActiveTab] = useState(getInitialTab);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [sysStatus, setSysStatus] = useState({ database: 'Connecting...', isProd: false, environment: 'development' });
   
   // Database Connecting Screen State (Skip on session refresh for instantaneous loading)
@@ -295,6 +298,16 @@ function App() {
               </span>
             </div>
 
+            {/* Cloud Backup Modal Quick Trigger Button */}
+            <button
+              onClick={() => setIsBackupModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-bold font-mono transition active:scale-95 shadow-sm shadow-indigo-500/10 cursor-pointer"
+              title="Open Database Backup & Cloud Sync Manager"
+            >
+              <Cloud className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Backup</span>
+            </button>
+
             {/* Mobile Hamburger Menu Toggle */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -346,6 +359,21 @@ function App() {
                   </button>
                 );
               })}
+
+              {/* Mobile Backup Button */}
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsBackupModalOpen(true);
+                }}
+                className="w-full mt-1 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Cloud className="w-4 h-4 text-indigo-400" />
+                  <span>Database Backup & Cloud Sync</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-indigo-400" />
+              </button>
             </div>
           </div>
         )}
@@ -354,13 +382,24 @@ function App() {
       {/* Main Tab Content View Container (Lazy Loaded with Suspense for Maximum Speed) */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-6">
         <Suspense fallback={<TabLoadingFallback />}>
-          {activeTab === 'dashboard' && <MainDashboard onNavigateTab={(tab) => handleSelectTab(tab)} />}
+          {activeTab === 'dashboard' && (
+            <MainDashboard
+              onNavigateTab={(tab) => handleSelectTab(tab)}
+              onOpenBackup={() => setIsBackupModalOpen(true)}
+            />
+          )}
           {activeTab === 'ipo' && <IpoDashboard isEmbedded={true} />}
           {activeTab === 'trading' && <TradingView />}
           {activeTab === 'expenses' && <ExpensesView />}
           {(activeTab === 'notes' || activeTab === 'buy') && <NotesView />}
         </Suspense>
       </main>
+
+      {/* Backup & Cloud Sync Modal */}
+      <BackupModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+      />
 
       {/* Modern Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 sm:px-6 text-center text-xs text-slate-500">

@@ -344,8 +344,11 @@ export default function TradingView() {
         isFullyClosed
       );
 
+      const currentInvested = remainingQty * avgBuyPrice;
+
       return {
         invested: totalBuyCost,
+        currentInvested,
         totalBuyQty: totalBuyQty || (parseInt(trade.quantity, 10) || 1),
         avgBuyPrice,
         totalSellQty,
@@ -382,6 +385,8 @@ export default function TradingView() {
       trade.sellPrice !== '' &&
       !isNaN(parseFloat(trade.sellPrice));
 
+    const currentInvested = isClosed ? 0 : invested;
+
     const sellPrice = isClosed ? parseFloat(trade.sellPrice) : null;
     const sellValue = isClosed ? sellPrice * qty : null;
 
@@ -401,6 +406,7 @@ export default function TradingView() {
 
     return {
       invested,
+      currentInvested,
       totalBuyQty: qty,
       avgBuyPrice: buyPrice,
       totalSellQty: isClosed ? qty : 0,
@@ -500,21 +506,27 @@ export default function TradingView() {
   const masterStats = useMemo(() => {
     let stockTotalPl = 0;
     let stockInvested = 0;
+    let stockCurrentInvested = 0;
     let stockClosedCount = 0;
+    let stockOpenCount = 0;
     let stockWinCount = 0;
     let stockCharges = 0;
 
     let intradayTotalPl = 0;
     let intradayInvested = 0;
+    let intradayCurrentInvested = 0;
     let intradayClosedCount = 0;
+    let intradayOpenCount = 0;
     let intradayWinCount = 0;
     let intradayCharges = 0;
 
     trades.forEach((t) => {
-      const { invested, hasSells, returnsInr, charges } = calculateTradeMetrics(t);
+      const { invested, currentInvested, hasSells, returnsInr, charges, isOpen, isPartial } = calculateTradeMetrics(t);
       if (t.tradeType === 'stock') {
         stockInvested += invested;
+        stockCurrentInvested += currentInvested;
         stockCharges += charges;
+        if (isOpen || isPartial) stockOpenCount += 1;
         if (hasSells && returnsInr !== null) {
           stockTotalPl += returnsInr;
           stockClosedCount += 1;
@@ -522,7 +534,9 @@ export default function TradingView() {
         }
       } else {
         intradayInvested += invested;
+        intradayCurrentInvested += currentInvested;
         intradayCharges += charges;
+        if (isOpen || isPartial) intradayOpenCount += 1;
         if (hasSells && returnsInr !== null) {
           intradayTotalPl += returnsInr;
           intradayClosedCount += 1;
@@ -534,24 +548,32 @@ export default function TradingView() {
     const netOverallPl = stockTotalPl + intradayTotalPl;
     const totalChargesPaid = stockCharges + intradayCharges;
     const totalClosed = stockClosedCount + intradayClosedCount;
+    const totalOpen = stockOpenCount + intradayOpenCount;
     const totalWins = stockWinCount + intradayWinCount;
     const overallWinRate = totalClosed > 0 ? ((totalWins / totalClosed) * 100).toFixed(1) : null;
     const totalInvested = stockInvested + intradayInvested;
+    const totalCurrentInvested = stockCurrentInvested + intradayCurrentInvested;
 
     return {
       stockTotalPl,
       stockInvested,
+      stockCurrentInvested,
       stockClosedCount,
+      stockOpenCount,
       stockCharges,
       intradayTotalPl,
       intradayInvested,
+      intradayCurrentInvested,
       intradayClosedCount,
+      intradayOpenCount,
       intradayCharges,
       totalChargesPaid,
       netOverallPl,
       totalClosed,
+      totalOpen,
       overallWinRate,
-      totalInvested
+      totalInvested,
+      totalCurrentInvested
     };
   }, [trades]);
 
@@ -1761,9 +1783,12 @@ export default function TradingView() {
                   <span className="text-[9px] sm:text-[10px] px-2 py-0.2 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-bold font-mono">
                     Live Analytics & Durations
                   </span>
+                  <span className="text-[9px] sm:text-[10px] px-2 py-0.2 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold font-mono">
+                    Current Active: {formatCurrency(masterStats.totalCurrentInvested)}
+                  </span>
                 </div>
                 <p className="text-[10px] sm:text-xs text-slate-400 font-medium truncate">
-                  Holding period tracking, P&L sorting, and multi-leg partial execution ledger
+                  Holding period tracking, P&L sorting, active capital & multi-leg execution ledger
                 </p>
               </div>
             </div>
@@ -1832,9 +1857,14 @@ export default function TradingView() {
             {masterStats.stockTotalPl > 0 ? '+' : ''}
             {formatCurrency(masterStats.stockTotalPl)}
           </div>
-          <p className="text-[9px] sm:text-[11px] text-slate-400 truncate">
-            Inv: {formatCurrency(masterStats.stockInvested)}
-          </p>
+          <div className="text-[9px] sm:text-[11px] text-slate-400 flex items-center justify-between gap-1 truncate font-mono">
+            <span className="text-emerald-400 font-semibold" title="Currently deployed in open/unsold positions">
+              Current: {formatCurrency(masterStats.stockCurrentInvested)}
+            </span>
+            <span className="text-slate-500" title="Total lifetime buy capital deployed">
+              Total: {formatCurrency(masterStats.stockInvested)}
+            </span>
+          </div>
         </div>
 
         {/* Card 2: Total Intraday P/L */}
@@ -1859,9 +1889,14 @@ export default function TradingView() {
             {masterStats.intradayTotalPl > 0 ? '+' : ''}
             {formatCurrency(masterStats.intradayTotalPl)}
           </div>
-          <p className="text-[9px] sm:text-[11px] text-slate-400 truncate">
-            {masterStats.intradayClosedCount} closed executions
-          </p>
+          <div className="text-[9px] sm:text-[11px] text-slate-400 flex items-center justify-between gap-1 truncate font-mono">
+            <span className="text-cyan-400 font-semibold" title="Currently deployed in open intraday positions">
+              Current: {formatCurrency(masterStats.intradayCurrentInvested)}
+            </span>
+            <span className="text-slate-500" title="Total lifetime intraday capital">
+              Total: {formatCurrency(masterStats.intradayInvested)}
+            </span>
+          </div>
         </div>
 
         {/* Card 3: Net Overall P/L */}
@@ -1888,9 +1923,14 @@ export default function TradingView() {
             {masterStats.netOverallPl > 0 ? '+' : ''}
             {formatCurrency(masterStats.netOverallPl)}
           </div>
-          <p className="text-[9px] sm:text-[11px] text-slate-400 truncate">
-            Combined net realized
-          </p>
+          <div className="text-[9px] sm:text-[11px] text-slate-400 flex items-center justify-between gap-1 truncate font-mono">
+            <span className="text-emerald-400 font-semibold" title="Total active capital across all open positions">
+              Active: {formatCurrency(masterStats.totalCurrentInvested)}
+            </span>
+            <span className="text-slate-500" title="Total cumulative capital deployed">
+              Total: {formatCurrency(masterStats.totalInvested)}
+            </span>
+          </div>
         </div>
 
         {/* Card 4: Total Charges & Brokerage Paid */}
@@ -1907,7 +1947,7 @@ export default function TradingView() {
           <div className="text-lg sm:text-2xl font-black font-mono tracking-tight text-amber-400 truncate">
             {formatCurrency(masterStats.totalChargesPaid)}
           </div>
-          <p className="text-[9px] sm:text-[11px] text-slate-400 truncate">
+          <p className="text-[9px] sm:text-[11px] text-slate-400 truncate font-mono">
             Stock: {formatCurrency(masterStats.stockCharges)} • Intra: {formatCurrency(masterStats.intradayCharges)}
           </p>
         </div>

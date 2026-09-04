@@ -27,10 +27,12 @@ import {
   Wallet,
   ArrowUpDown,
   FileSpreadsheet,
-  AlertCircle
+  AlertCircle,
+  Cloud,
+  Database
 } from 'lucide-react';
 
-export default function MainDashboard({ onNavigateTab }) {
+export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
   // Live Data States backed by SWR Cache
   const [ipos, setIpos] = useState(() => {
     const cached = cacheManager.get('ipos_list');
@@ -57,16 +59,19 @@ export default function MainDashboard({ onNavigateTab }) {
     return Array.isArray(cached) ? cached : [];
   });
 
+  const [backupStatus, setBackupStatus] = useState(null);
+
   // Fetch all live data in parallel
   useEffect(() => {
     const fetchAllData = async () => {
       try {
-        const [ipoRes, tradeRes, expRes, noteRes, buyRes] = await Promise.allSettled([
+        const [ipoRes, tradeRes, expRes, noteRes, buyRes, backupRes] = await Promise.allSettled([
           axios.get('/api/ipos'),
           axios.get('/api/trades'),
           axios.get('/api/expenses'),
           axios.get('/api/notes'),
-          axios.get('/api/buy')
+          axios.get('/api/buy'),
+          axios.get('/api/backup/status')
         ]);
 
         if (ipoRes.status === 'fulfilled' && Array.isArray(ipoRes.value.data)) {
@@ -89,6 +94,9 @@ export default function MainDashboard({ onNavigateTab }) {
           setBuyItems(buyRes.value.data);
           cacheManager.set('personal_buy_items_list', buyRes.value.data, 120000);
         }
+        if (backupRes.status === 'fulfilled' && backupRes.value.data) {
+          setBackupStatus(backupRes.value.data);
+        }
       } catch (err) {
         console.warn('Dashboard fetch sync:', err);
       }
@@ -96,6 +104,27 @@ export default function MainDashboard({ onNavigateTab }) {
 
     fetchAllData();
   }, []);
+
+  // Format Backup Time
+  const formatBackupTime = (dateStr) => {
+    if (!dateStr) return 'No backup yet';
+    try {
+      const d = new Date(dateStr);
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      
+      const yesterday = new Date();
+      yesterday.setDate(now.getDate() - 1);
+      const isYesterday = d.toDateString() === yesterday.toDateString();
+
+      const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+      if (isToday) return `Today at ${timeStr}`;
+      if (isYesterday) return `Yesterday at ${timeStr}`;
+      return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${timeStr}`;
+    } catch {
+      return 'Recently';
+    }
+  };
 
   // Format Currency
   const formatCurrency = (val) => {
@@ -141,18 +170,20 @@ export default function MainDashboard({ onNavigateTab }) {
     let closedTrades = 0;
     let openTrades = 0;
     let totalInvested = 0;
+    let currentInvested = 0;
 
     (Array.isArray(trades) ? trades : []).forEach((t) => {
       const buyPrice = parseFloat(t.buyPrice) || 0;
       const qty = parseInt(t.quantity, 10) || 0;
       const charges = parseFloat(t.charges) || 0;
-      totalInvested += buyPrice * qty;
+      const tradeBuyCost = buyPrice * qty;
+      totalInvested += tradeBuyCost;
 
       const isClosed = t.sellPrice !== null && t.sellPrice !== undefined && t.sellPrice !== '';
       if (isClosed) {
         closedTrades += 1;
         const sellPrice = parseFloat(t.sellPrice) || 0;
-        const netTradePl = (sellPrice * qty) - (buyPrice * qty) - charges;
+        const netTradePl = (sellPrice * qty) - tradeBuyCost - charges;
         if (netTradePl > 0) winningTrades += 1;
 
         if (t.tradeType === 'stock') {
@@ -162,6 +193,7 @@ export default function MainDashboard({ onNavigateTab }) {
         }
       } else {
         openTrades += 1;
+        currentInvested += tradeBuyCost;
       }
     });
 
@@ -170,14 +202,15 @@ export default function MainDashboard({ onNavigateTab }) {
 
     return {
       total: trades.length,
-      closedTrades,
-      openTrades,
+      netPl,
       stockPl,
       intradayPl,
-      netPl,
       winningTrades,
+      closedTrades,
+      openTrades,
       winRate,
-      totalInvested
+      totalInvested,
+      currentInvested
     };
   }, [trades]);
 
@@ -376,28 +409,28 @@ export default function MainDashboard({ onNavigateTab }) {
           <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0 w-full md:w-auto">
             <button
               onClick={() => onNavigateTab('trading')}
-              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-blue-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-blue-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate cursor-pointer"
             >
               <TrendingUp className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Trading</span>
             </button>
             <button
               onClick={() => onNavigateTab('ipo')}
-              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-cyan-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-cyan-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate cursor-pointer"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">IPO Matrix</span>
             </button>
             <button
               onClick={() => onNavigateTab('expenses')}
-              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate cursor-pointer"
             >
               <CreditCard className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Expenses</span>
             </button>
             <button
               onClick={() => onNavigateTab('notes')}
-              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-purple-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-purple-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-purple-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-purple-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate cursor-pointer"
             >
               <FileText className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Notes</span>
@@ -456,8 +489,8 @@ export default function MainDashboard({ onNavigateTab }) {
               <span className="truncate">Trading Journal</span>
               <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 group-hover:text-indigo-300 group-hover:translate-x-1 transition-all shrink-0" />
             </h3>
-            <p className="text-[10px] sm:text-xs text-slate-400 truncate">
-              {tradingStats.winRate}% Win Rate • {tradingStats.openTrades} Active Trades
+            <p className="text-[10px] sm:text-xs text-slate-400 truncate font-mono">
+              Active: <span className="text-emerald-400 font-bold">{formatCurrency(tradingStats.currentInvested)}</span> • Total: {formatCurrency(tradingStats.totalInvested)}
             </p>
           </div>
         </button>
@@ -608,19 +641,57 @@ export default function MainDashboard({ onNavigateTab }) {
           </div>
         </div>
 
-        {/* Right: Live Unified Activity Stream */}
-        <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3 sm:space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-cyan-400" />
-              <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider font-mono">
-                Recent Activity
-              </h3>
+        {/* Right Column: Database Cloud Backup Quick Card + Unified Activity Stream */}
+        <div className="space-y-3.5 sm:space-y-4 flex flex-col">
+          {/* Cloud Database Backup Widget */}
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950/30 to-slate-900 border border-slate-800/90 hover:border-indigo-500/40 rounded-2xl p-3.5 sm:p-4 shadow-xl transition-all space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 shrink-0">
+                  <Cloud className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight flex items-center gap-1.5 truncate">
+                    <span>Database & Drive Sync</span>
+                  </h4>
+                  <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-slate-400 font-mono truncate">
+                    <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
+                    <span>Last: {formatBackupTime(backupStatus?.lastBackupTime)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <span className={`text-[9px] sm:text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                backupStatus?.isConfigured
+                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                  : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+              }`}>
+                {backupStatus?.isConfigured ? '🟢 Drive Linked' : '🟡 Local Mode'}
+              </span>
             </div>
-            <span className="text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-              Live Feed
-            </span>
+
+            <button
+              onClick={onOpenBackup}
+              className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Cloud className="w-3.5 h-3.5" />
+              <span>Backup Database Now</span>
+            </button>
           </div>
+
+          {/* Unified Activity Stream */}
+          <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3 sm:space-y-4 flex-1">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-cyan-400" />
+                <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider font-mono">
+                  Recent Activity
+                </h3>
+              </div>
+              <span className="text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                Live Feed
+              </span>
+            </div>
 
           <div className="space-y-2 sm:space-y-2.5">
             {recentActivities.length === 0 ? (
@@ -659,5 +730,6 @@ export default function MainDashboard({ onNavigateTab }) {
         </div>
       </div>
     </div>
+  </div>
   );
 }

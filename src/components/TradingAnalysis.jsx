@@ -176,8 +176,11 @@ export default function TradingAnalysis({ trades = [], onBack }) {
         isFullyClosed
       );
 
+      const currentInvested = remainingQty * avgBuyPrice;
+
       return {
         invested: totalBuyCost,
+        currentInvested,
         totalBuyQty: totalBuyQty || (parseInt(trade.quantity, 10) || 1),
         avgBuyPrice,
         totalSellQty,
@@ -208,6 +211,8 @@ export default function TradingAnalysis({ trades = [], onBack }) {
       trade.sellPrice !== '' &&
       !isNaN(parseFloat(trade.sellPrice));
 
+    const currentInvested = isClosed ? 0 : invested;
+
     const sellPrice = isClosed ? parseFloat(trade.sellPrice) : null;
     const sellValue = isClosed ? sellPrice * qty : null;
 
@@ -227,6 +232,7 @@ export default function TradingAnalysis({ trades = [], onBack }) {
 
     return {
       invested,
+      currentInvested,
       totalBuyQty: qty,
       avgBuyPrice: buyPrice,
       totalSellQty: isClosed ? qty : 0,
@@ -375,6 +381,7 @@ export default function TradingAnalysis({ trades = [], onBack }) {
   // Aggregate Performance Metrics for the filtered subset
   const analytics = useMemo(() => {
     let totalInvested = 0;
+    let currentInvested = 0;
     let totalRealizedPnl = 0;
     let totalCharges = 0;
 
@@ -397,6 +404,7 @@ export default function TradingAnalysis({ trades = [], onBack }) {
     filteredTrades.forEach((trade) => {
       const m = calculateTradeMetrics(trade);
       totalInvested += m.invested;
+      currentInvested += m.currentInvested;
       totalCharges += m.charges;
 
       if (m.hasSells && m.returnsInr !== null) {
@@ -422,7 +430,7 @@ export default function TradingAnalysis({ trades = [], onBack }) {
         }
       }
 
-      if (m.isOpen) {
+      if (m.isOpen || m.isPartial) {
         openCount++;
       }
     });
@@ -443,6 +451,7 @@ export default function TradingAnalysis({ trades = [], onBack }) {
 
     return {
       totalInvested,
+      currentInvested,
       totalRealizedPnl,
       totalCharges,
       winCount,
@@ -458,13 +467,12 @@ export default function TradingAnalysis({ trades = [], onBack }) {
       avgLoss,
       riskRewardRatio,
       profitFactor,
+      avgWinnerHoldingDays,
+      overallRoi,
       maxWin,
       maxWinTrade,
       maxLoss,
-      maxLossTrade,
-      avgWinnerHoldingDays,
-      avgLoserHoldingDays,
-      overallRoi
+      maxLossTrade
     };
   }, [filteredTrades]);
 
@@ -975,9 +983,14 @@ export default function TradingAnalysis({ trades = [], onBack }) {
             {analytics.totalRealizedPnl > 0 ? '+' : ''}
             {formatCurrency(analytics.totalRealizedPnl)}
           </div>
-          <p className="text-[9px] sm:text-[11px] text-slate-400 truncate">
-            Inflow: {formatCurrency(analytics.totalInvested)}
-          </p>
+          <div className="text-[9px] sm:text-[11px] text-slate-400 flex items-center justify-between gap-1 truncate font-mono">
+            <span className="text-emerald-400 font-semibold" title="Active capital in open positions">
+              Active: {formatCurrency(analytics.currentInvested)}
+            </span>
+            <span className="text-slate-500" title="Total cumulative capital deployed">
+              Inflow: {formatCurrency(analytics.totalInvested)}
+            </span>
+          </div>
         </div>
 
         {/* KPI 2: Win Rate & Trade Counts */}
