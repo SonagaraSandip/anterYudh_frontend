@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ShoppingBag,
   Plus,
@@ -28,6 +29,26 @@ export default function BuyView() {
     savedAmount: '',
     priority: 'High'
   });
+
+  // Lock background body scroll and listen for ESC key
+  useEffect(() => {
+    if (!isModalOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsModalOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isModalOpen]);
 
   const totalCost = items.reduce((sum, i) => sum + i.estimatedCost, 0);
   const totalSaved = items.reduce((sum, i) => sum + i.savedAmount, 0);
@@ -149,34 +170,52 @@ export default function BuyView() {
                 {isReady && (
                   <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-1 rounded-lg flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" />
-                    <span>Ready</span>
+                    <span>Funded</span>
                   </span>
                 )}
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-400">Saved: {formatCurrency(item.savedAmount)}</span>
-                  <span className="text-amber-300 font-semibold">Cost: {formatCurrency(item.estimatedCost)}</span>
+                  <span className="text-slate-400">Allocated: {formatCurrency(item.savedAmount)}</span>
+                  <span className="text-slate-200 font-semibold">Cost: {formatCurrency(item.estimatedCost)}</span>
                 </div>
                 <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-800">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      isReady ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                      isReady ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : 'bg-gradient-to-r from-amber-500 to-orange-400'
                     }`}
                     style={{ width: `${Math.min(parseFloat(fundedPercent), 100)}%` }}
                   ></div>
                 </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
+                <span className="font-mono">
+                  {fundedPercent}% target reached
+                </span>
+                <span className="text-slate-500 font-mono">
+                  Remaining: {formatCurrency(Math.max(0, item.estimatedCost - item.savedAmount))}
+                </span>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Modal: Add Item */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+      {/* Modal: Add New Item (Rendered in Body Portal for True Viewport Screen Centering) */}
+      {isModalOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto my-auto relative z-[100000]"
+          >
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-amber-400" />
               <span>Add Planned Item / Wishlist</span>
@@ -267,7 +306,8 @@ export default function BuyView() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

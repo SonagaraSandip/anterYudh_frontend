@@ -158,6 +158,8 @@ export default function TradingAnalysis({ trades = [], onBack }) {
       const avgSellPrice = totalSellQty > 0 ? totalSellRevenue / totalSellQty : null;
 
       const remainingQty = Math.max(0, totalBuyQty - totalSellQty);
+      const totalBuyCharges = buyLegs.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
+      const totalSellCharges = sellLegs.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
       const totalCharges = rawTx.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
 
       const hasSells = totalSellQty > 0;
@@ -165,8 +167,14 @@ export default function TradingAnalysis({ trades = [], onBack }) {
       const isPartial = totalSellQty > 0 && totalSellQty < totalBuyQty;
 
       const costBasisOfSold = totalSellQty * avgBuyPrice;
-      const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - totalCharges : null;
+      const soldRatio = totalBuyQty > 0 ? Math.min(1, totalSellQty / totalBuyQty) : 0;
+      const realizedBuyCharges = totalBuyCharges * soldRatio;
+      const realizedCharges = totalSellCharges + realizedBuyCharges;
+
+      const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - realizedCharges : null;
       const returnsPercent = hasSells && costBasisOfSold > 0 ? (returnsInr / costBasisOfSold) * 100 : 0;
+
+      const openBuyCharges = Math.max(0, totalBuyCharges - realizedBuyCharges);
 
       const earliestBuyDate = buyLegs[0]?.date || trade.buyDate;
       const latestSellDate = sellLegs[sellLegs.length - 1]?.date || trade.sellDate;
@@ -193,7 +201,10 @@ export default function TradingAnalysis({ trades = [], onBack }) {
         isOpen: totalSellQty === 0,
         returnsInr,
         returnsPercent,
-        charges: totalCharges,
+        charges: isFullyClosed ? totalCharges : (hasSells ? realizedCharges : totalBuyCharges),
+        totalGrossCharges: totalCharges,
+        realizedCharges,
+        openBuyCharges,
         holdingDays,
         holdingDurationText
       };

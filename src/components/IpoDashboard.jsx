@@ -25,9 +25,13 @@ import {
   Smartphone,
   Calendar,
   Users,
-  Download
+  Download,
+  ArrowUpDown
 } from 'lucide-react';
 import { exportIposToExcel } from '../utils/excelExporter';
+import { IpoDesktopRow } from './ipo/IpoDesktopRow';
+import { IpoMobileCard } from './ipo/IpoMobileCard';
+import { ReorderPersonsModal } from './ipo/ReorderPersonsModal';
 
 const API_BASE = '/api/ipos';
 
@@ -92,6 +96,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
   // Modals & form state
   const [isAddIpoOpen, setIsAddIpoOpen] = useState(false);
   const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
+  const [isReorderPersonsOpen, setIsReorderPersonsOpen] = useState(false);
   const [isSubmittingIpo, setIsSubmittingIpo] = useState(false);
   const [isSubmittingPerson, setIsSubmittingPerson] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
@@ -197,8 +202,14 @@ export default function IpoDashboard({ isEmbedded = false }) {
     setCurrentPage(1);
   }, [searchQuery, filterStatus, pageSize]);
 
-  // Handle Escape key to close open modals
+  // Handle Escape key and body scroll lock for open modals
   useEffect(() => {
+    const isAnyModalOpen = isAddIpoOpen || isAddPersonOpen || unallotConfirmModal || deletePersonConfirmModal;
+    if (!isAnyModalOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setIsAddIpoOpen(false);
@@ -207,11 +218,20 @@ export default function IpoDashboard({ isEmbedded = false }) {
         setDeletePersonConfirmModal(null);
       }
     };
-    if (isAddIpoOpen || isAddPersonOpen || unallotConfirmModal || deletePersonConfirmModal) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isAddIpoOpen, isAddPersonOpen, unallotConfirmModal, deletePersonConfirmModal]);
+
+  // Save Custom Person Order and Lock
+  const handleSavePersonsOrder = (newOrder) => {
+    if (!Array.isArray(newOrder)) return;
+    setPersons(newOrder);
+    localStorage.setItem('antaryudh_demat_persons', JSON.stringify(newOrder));
+  };
 
   // Sync Person List across all local IPOs
   const ensurePersonAcrossIpos = (personName) => {
@@ -702,7 +722,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap w-full md:w-auto">
-            <div className="grid grid-cols-3 sm:flex sm:items-center gap-2 w-full sm:w-auto flex-1">
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto flex-1">
               <button
                 onClick={() => exportIposToExcel(ipos)}
                 title="Download IPO applied & allotted details in Excel (.xlsx)"
@@ -713,11 +733,21 @@ export default function IpoDashboard({ isEmbedded = false }) {
               </button>
 
               <button
+                type="button"
+                onClick={() => setIsReorderPersonsOpen(true)}
+                title="Re-arrange Demat applicant names & lock order"
+                className="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-2 text-xs font-semibold rounded-xl bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-500/40 transition-all shadow-sm active:scale-95 truncate"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span className="truncate">Reorder</span>
+              </button>
+
+              <button
                 onClick={() => setIsAddPersonOpen(true)}
                 className="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 transition-all shadow-sm active:scale-95 truncate"
               >
                 <UserPlus className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                <span className="truncate"> Person</span>
+                <span className="truncate">Person</span>
               </button>
 
               <button
@@ -725,7 +755,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                 className="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-lg shadow-cyan-600/30 transition-all active:scale-95 truncate"
               >
                 <Plus className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate"> IPO</span>
+                <span className="truncate">IPO</span>
               </button>
             </div>
 
@@ -1033,274 +1063,34 @@ export default function IpoDashboard({ isEmbedded = false }) {
                 </button>
               </div>
             ) : (
-
-              paginatedIpos.map((ipo) => {
-                const pl = parseFloat(ipo.profitLoss) || 0;
-                const lc = parseFloat(ipo.lotCost) || 0;
-                const ipoPercent = calculateIpoPercentage(ipo);
-                const isExpanded = expandedIpoIds.has(ipo.id);
-
-                const appliedCount = (ipo.applications || []).filter((a) => a.applied).length;
-                const allottedCount = (ipo.applications || []).filter((a) => a.allotted).length;
-                const totalDematCount = persons.length;
-
-                return (
-                  <div
-                    key={ipo.id}
-                    className={`bg-slate-900 border rounded-xl p-3.5 shadow-lg transition-all duration-200 ${
-                      isExpanded ? 'border-cyan-500/40 ring-1 ring-cyan-500/20' : 'border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    {/* Header Row: IPO Name & P&L / Actions */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div
-                        className="flex-1 min-w-0 cursor-pointer"
-                        onClick={() => toggleIpoExpand(ipo.id)}
-                      >
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h3 className="font-bold text-slate-100 text-sm tracking-tight hover:text-cyan-300 transition-colors">
-                            {ipo.ipoName}
-                          </h3>
-                        </div>
-
-                        {/* Lot Cost & Creation Date with Mobile Edit */}
-                        <div className="flex items-center gap-2 mt-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                          {editingLotCostId === ipo.id ? (
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="number"
-                                value={lotCostInput}
-                                onChange={(e) => setLotCostInput(e.target.value)}
-                                onFocus={(e) => e.target.select()}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleSaveLotCost(ipo.id);
-                                  if (e.key === 'Escape') setEditingLotCostId(null);
-                                }}
-                                placeholder="0"
-                                autoFocus
-                                className="w-20 px-1.5 py-0.5 text-[10px] font-mono bg-slate-950 border border-indigo-500 rounded text-white focus:outline-none"
-                              />
-                              <button
-                                onClick={() => handleSaveLotCost(ipo.id)}
-                                className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[9px] font-bold"
-                              >
-                                Save
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => handleStartEditLotCost(ipo)}
-                              className="text-[10px] text-indigo-300 bg-indigo-950/50 hover:bg-indigo-900/50 border border-indigo-500/30 px-2 py-0.5 rounded font-mono flex items-center gap-1 transition"
-                              title="Tap to edit Lot Cost"
-                            >
-                              <span>Lot: {lc > 0 ? formatCurrency(lc) : 'Set Cost'}</span>
-                              <Edit2 className="w-2.5 h-2.5 opacity-60" />
-                            </button>
-                          )}
-
-                          {ipo.createdAt && (
-                            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                              <Calendar className="w-3 h-3 text-slate-500 shrink-0" />
-                              <span>{formatDate(ipo.createdAt)}</span>
-                            </span>
-                          )}
-                        </div>
-                        {ipo.notes && <p className="text-xs text-slate-400 mt-1 truncate">{ipo.notes}</p>}
-                      </div>
-
-                      {/* Right Side: P&L Badge, Return %, Trash */}
-                      <div className="flex flex-col items-end gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-1.5">
-                          {editingProfitLossId === ipo.id ? (
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="number"
-                                value={profitLossInput}
-                                onChange={(e) => setProfitLossInput(e.target.value)}
-                                onFocus={(e) => e.target.select()}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleSaveProfitLoss(ipo.id);
-                                  if (e.key === 'Escape') setEditingProfitLossId(null);
-                                }}
-                                placeholder="0"
-                                autoFocus
-                                className="w-16 px-1.5 py-0.5 text-[10px] font-mono bg-slate-950 border border-indigo-500 rounded text-right text-white focus:outline-none"
-                              />
-                              <button
-                                onClick={() => handleSaveProfitLoss(ipo.id)}
-                                className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[9px] font-bold"
-                              >
-                                Save
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => handleStartEditProfitLoss(ipo)}
-                              className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold border transition ${
-                                pl > 0
-                                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                  : pl < 0
-                                  ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border-rose-500/30'
-                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
-                              }`}
-                              title="Tap to edit Profit/Loss"
-                            >
-                              {pl > 0 ? '+' : ''}
-                              {formatCurrency(pl)}
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => handleDeleteIpo(ipo.id)}
-                            className="text-slate-500 hover:text-rose-400 p-1 transition"
-                            title="Delete IPO"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        {ipoPercent !== null && (
-                          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${
-                            ipoPercent >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
-                          }`}>
-                            {ipoPercent > 0 ? '+' : ''}{ipoPercent.toFixed(1)}% Return
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Collapsible Dropdown Trigger Bar */}
-                    <div
-                      onClick={() => toggleIpoExpand(ipo.id)}
-                      className={`mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between cursor-pointer group select-none transition-colors ${
-                        isExpanded ? 'text-cyan-300' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {/* Applied Count Badge */}
-                        <span
-                          className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1 transition ${
-                            appliedCount > 0
-                              ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                              : 'bg-slate-950 text-slate-500 border border-slate-800'
-                          }`}
-                        >
-                          <Users className="w-3 h-3 text-cyan-400" />
-                          <span>{appliedCount}/{totalDematCount} Applied</span>
-                        </span>
-
-                        {/* Allotted Badge if any */}
-                        {allottedCount > 0 && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                            <span>{allottedCount} Allotted</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Dropdown Toggle Button with animated chevron */}
-                      <div className="flex items-center gap-1 text-xs font-semibold text-cyan-400 group-hover:text-cyan-300">
-                        <span>{isExpanded ? 'Hide Demats' : 'Show Demats'}</span>
-                        <div
-                          className={`p-1 rounded-md bg-slate-800/80 border border-slate-700/60 transition-transform duration-200 ${
-                            isExpanded ? 'rotate-180 bg-cyan-950/60 text-cyan-400 border-cyan-500/30' : ''
-                          }`}
-                        >
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Person Applications Dropdown / Accordion Body */}
-                    {isExpanded && (
-                      <div className="mt-3 pt-3 border-t border-cyan-500/20 space-y-2.5 animate-fadeIn">
-                        {/* <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-0.5">
-                          <span className="flex items-center gap-1 text-cyan-400">
-                            <Users className="w-3.5 h-3.5" />
-                            <span>Person Demat Accounts ({persons.length})</span>
-                          </span>
-                          <span className="text-[10px] font-normal text-slate-500 lowercase">
-                            tap checkbox to toggle
-                          </span>
-                        </div> */}
-
-                        {persons.length === 0 ? (
-                          <div className="p-3 text-center text-xs text-slate-500 bg-slate-950/60 rounded-lg border border-slate-800">
-                            No demat accounts registered yet.
-                          </div>
-                        ) : (
-                          persons.map((person) => {
-                            const app = (ipo.applications || []).find((a) => isSamePerson(a.personName, person)) || {
-                              applied: false,
-                              allotted: false,
-                              notes: ''
-                            };
-                            return (
-                              <div
-                                key={person}
-                                className={`p-2.5 rounded-xl border flex flex-col gap-2 transition-all ${
-                                  app.allotted
-                                    ? 'bg-emerald-950/20 border-emerald-500/40 shadow-sm shadow-emerald-500/10'
-                                    : app.applied
-                                    ? 'bg-cyan-950/20 border-cyan-500/40'
-                                    : 'bg-slate-950/60 border-slate-800/80'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between text-xs">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-semibold text-slate-200">{person}</span>
-                                    {app.allotted ? (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                        Allotted
-                                      </span>
-                                    ) : app.applied ? (
-                                      <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                                        Applied
-                                      </span>
-                                    ) : null}
-                                  </div>
-
-                                  <div className="flex items-center gap-3">
-                                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                                      <input
-                                        type="checkbox"
-                                        checked={Boolean(app.applied)}
-                                        onChange={() => handleToggleApplication(ipo.id, person, 'applied')}
-                                        className="w-4 h-4 rounded text-cyan-600 bg-slate-900 border-slate-700 accent-cyan-500 cursor-pointer"
-                                      />
-                                      <span className={app.applied ? 'text-cyan-300 font-semibold text-xs' : 'text-slate-400 text-xs'}>
-                                        Applied
-                                      </span>
-                                    </label>
-                                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                                      <input
-                                        type="checkbox"
-                                        checked={Boolean(app.allotted)}
-                                        onChange={() => handleToggleAllottedWithConfirm(ipo, person, Boolean(app.allotted))}
-                                        className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 accent-emerald-500 cursor-pointer"
-                                      />
-                                      <span className={app.allotted ? 'text-emerald-300 font-bold text-xs' : 'text-slate-400 text-xs'}>
-                                        Allotted
-                                      </span>
-                                    </label>
-                                  </div>
-                                </div>
-
-                                <input
-                                  type="text"
-                                  placeholder="App # / UPI / Demat notes..."
-                                  value={app.notes || ''}
-                                  onChange={(e) => handleUpdatePersonNotes(ipo.id, person, e.target.value)}
-                                  className="w-full px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded-lg text-slate-300 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-colors"
-                                />
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+              paginatedIpos.map((ipo) => (
+                <IpoMobileCard
+                  key={ipo.id}
+                  ipo={ipo}
+                  persons={persons}
+                  isExpanded={expandedIpoIds.has(ipo.id)}
+                  onToggleExpand={toggleIpoExpand}
+                  editingLotCostId={editingLotCostId}
+                  lotCostInput={lotCostInput}
+                  onLotCostInputChange={setLotCostInput}
+                  onSaveLotCost={handleSaveLotCost}
+                  onCancelEditLotCost={() => setEditingLotCostId(null)}
+                  onStartEditLotCost={handleStartEditLotCost}
+                  editingProfitLossId={editingProfitLossId}
+                  profitLossInput={profitLossInput}
+                  onProfitLossInputChange={setProfitLossInput}
+                  onSaveProfitLoss={handleSaveProfitLoss}
+                  onCancelEditProfitLoss={() => setEditingProfitLossId(null)}
+                  onStartEditProfitLoss={handleStartEditProfitLoss}
+                  onToggleApplication={handleToggleApplication}
+                  onToggleAllottedWithConfirm={handleToggleAllottedWithConfirm}
+                  onUpdatePersonNotes={handleUpdatePersonNotes}
+                  onDeleteIpo={handleDeleteIpo}
+                  formatDate={formatDate}
+                  formatCurrency={formatCurrency}
+                  calculateIpoPercentage={calculateIpoPercentage}
+                />
+              ))
             )}
 
             {/* Pagination Controls for Mobile Cards */}
@@ -1423,263 +1213,32 @@ export default function IpoDashboard({ isEmbedded = false }) {
                       </td>
                     </tr>
                   ) : (
-
-                    paginatedIpos.map((ipo) => {
-                      const pl = parseFloat(ipo.profitLoss) || 0;
-                      const lc = parseFloat(ipo.lotCost) || 0;
-                      const isPositive = pl > 0;
-                      const isNegative = pl < 0;
-                      const ipoPercent = calculateIpoPercentage(ipo);
-                      const appliedCount = (ipo.applications || []).filter((a) => a.applied).length;
-                      const allottedCount = (ipo.applications || []).filter((a) => a.allotted).length;
-                      const totalDematCount = persons.length;
-
-                      return (
-                        <tr
-                          key={ipo.id}
-                          className={`transition-colors group ${
-                            appliedCount > 0
-                              ? 'bg-slate-900/90 hover:bg-slate-800/60'
-                              : 'hover:bg-slate-800/40'
-                          }`}
-                        >
-                          {/* 1. Left: IPO Name, Lot Cost & Notes */}
-                          <td className="py-2.5 px-3 sm:px-4 font-medium text-slate-200 sticky left-0 z-10 bg-slate-900 group-hover:bg-slate-850 min-w-[220px] sm:min-w-[260px] border-r border-slate-800/80 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="font-semibold text-slate-100 text-xs sm:text-sm tracking-tight truncate max-w-[180px]" title={ipo.ipoName}>
-                                {ipo.ipoName}
-                              </div>
-                              {/* Web-only Demat Application Count Badge (e.g., 4/7) */}
-                              <span
-                                className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold px-2 py-0.5 rounded-md shrink-0 border transition-all ${
-                                  appliedCount === totalDematCount && totalDematCount > 0
-                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm shadow-emerald-500/10'
-                                    : appliedCount > 0
-                                    ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 shadow-sm shadow-indigo-500/10'
-                                    : 'bg-slate-950 text-slate-500 border-slate-800'
-                                }`}
-                                title={`${appliedCount} of ${totalDematCount} Demat accounts applied`}
-                              >
-                                <Users className="w-3 h-3 text-indigo-400" />
-                                <span>{appliedCount}/{totalDematCount}</span>
-                              </span>
-                            </div>
-
-                            {/* Lot Cost & Date Added */}
-                            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                              {editingLotCostId === ipo.id ? (
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    type="number"
-                                    value={lotCostInput}
-                                    onChange={(e) => setLotCostInput(e.target.value)}
-                                    onFocus={(e) => e.target.select()}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleSaveLotCost(ipo.id);
-                                      if (e.key === 'Escape') setEditingLotCostId(null);
-                                    }}
-                                    placeholder="0"
-                                    autoFocus
-                                    className="w-20 px-1.5 py-0.5 text-[10px] font-mono bg-slate-950 border border-indigo-500 rounded text-white focus:outline-none"
-                                  />
-                                  <button
-                                    onClick={() => handleSaveLotCost(ipo.id)}
-                                    className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[9px] font-bold"
-                                  >
-                                    Save
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => handleStartEditLotCost(ipo)}
-                                  className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700/80 hover:border-indigo-500/50 transition flex items-center gap-1"
-                                  title="Click to edit Lot Cost"
-                                >
-                                  <span>Lot: {lc > 0 ? formatCurrency(lc) : 'Set Cost'}</span>
-                                  <Edit2 className="w-2.5 h-2.5 opacity-60 shrink-0" />
-                                </button>
-                              )}
-
-                              {ipo.createdAt && (
-                                <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800/80" title={`Added on ${formatDate(ipo.createdAt)}`}>
-                                  <Calendar className="w-2.5 h-2.5 text-slate-500 shrink-0" />
-                                  <span>{formatDate(ipo.createdAt)}</span>
-                                </span>
-                              )}
-                            </div>
-
-                            {ipo.notes && (
-                              <div className="text-[11px] text-slate-400 max-w-[240px] truncate mt-1" title={ipo.notes}>
-                                {ipo.notes}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* 2. Dynamic Middle Columns for Each Person */}
-                          {persons.map((person) => {
-                            const app = (ipo.applications || []).find(
-                              (a) => isSamePerson(a.personName, person)
-                            ) || { applied: false, allotted: false, notes: '' };
-
-                            return (
-                              <td
-                                key={person}
-                                className={`py-1.5 px-2 min-w-[150px] max-w-[180px] border-r border-slate-800/80 align-middle transition-colors ${
-                                  app.allotted
-                                    ? 'bg-emerald-950/25'
-                                    : app.applied
-                                    ? 'bg-indigo-950/40'
-                                    : ''
-                                }`}
-                              >
-                                <div className="flex flex-col gap-1">
-                                  {/* Interactive Checkbox Pair */}
-                                  <div className="grid grid-cols-2 gap-1">
-                                    {/* Applied Checkbox */}
-                                    <label
-                                      className={`flex items-center justify-center gap-1 p-0.5 rounded cursor-pointer transition select-none border ${
-                                        app.applied
-                                          ? 'bg-indigo-600/25 border-indigo-500/50 text-indigo-200 shadow-sm'
-                                          : 'bg-slate-950/60 hover:bg-slate-800 border-slate-800'
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={Boolean(app.applied)}
-                                        onChange={() =>
-                                          handleToggleApplication(ipo.id, person, 'applied')
-                                        }
-                                        className="w-3 h-3 rounded text-indigo-600 bg-slate-900 border-slate-700 cursor-pointer accent-indigo-500"
-                                      />
-                                      <span
-                                        className={`text-[9px] ${
-                                          app.applied ? 'text-indigo-200 font-bold' : 'text-slate-500'
-                                        }`}
-                                      >
-                                        App
-                                      </span>
-                                    </label>
-
-                                    {/* Allotted Checkbox */}
-                                    <label
-                                      className={`flex items-center justify-center gap-1 p-0.5 rounded cursor-pointer transition select-none border ${
-                                        app.allotted
-                                          ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200'
-                                          : 'bg-slate-950/60 hover:bg-slate-800 border-slate-800'
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={Boolean(app.allotted)}
-                                        onChange={() =>
-                                          handleToggleAllottedWithConfirm(ipo, person, Boolean(app.allotted))
-                                        }
-                                        className="w-3 h-3 rounded text-emerald-500 bg-slate-900 border-slate-700 cursor-pointer accent-emerald-500"
-                                      />
-                                      <span
-                                        className={`text-[9px] ${
-                                          app.allotted ? 'text-emerald-300 font-bold' : 'text-slate-500'
-                                        }`}
-                                      >
-                                        Allot
-                                      </span>
-                                    </label>
-                                  </div>
-
-                                  {/* Small Notes Input per person */}
-                                  <input
-                                    type="text"
-                                    placeholder="Notes..."
-                                    value={app.notes || ''}
-                                    onChange={(e) =>
-                                      handleUpdatePersonNotes(ipo.id, person, e.target.value)
-                                    }
-                                    className="w-full px-1.5 py-0.5 text-[9px] bg-slate-950/80 border border-slate-800/90 rounded text-slate-300 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition"
-                                  />
-                                </div>
-                              </td>
-                            );
-                          })}
-
-                          {/* 3. Right: Profit / Loss Badge & Percentage Return */}
-                          <td className="py-2.5 px-3 sm:px-4 text-right sticky right-0 z-10 bg-slate-900 group-hover:bg-slate-850 min-w-[140px] border-l border-slate-800 shadow-[-2px_0_5px_rgba(0,0,0,0.3)]">
-                            {editingProfitLossId === ipo.id ? (
-                              <div className="flex items-center justify-end gap-1">
-                                <input
-                                  type="number"
-                                  value={profitLossInput}
-                                  onChange={(e) => setProfitLossInput(e.target.value)}
-                                  onFocus={(e) => e.target.select()}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleSaveProfitLoss(ipo.id);
-                                    if (e.key === 'Escape') setEditingProfitLossId(null);
-                                  }}
-                                  placeholder="0"
-                                  autoFocus
-                                  className="w-16 px-1.5 py-0.5 text-[10px] font-mono bg-slate-950 border border-indigo-500 rounded text-right text-white focus:outline-none"
-                                />
-                                <button
-                                  onClick={() => handleSaveProfitLoss(ipo.id)}
-                                  className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[9px] font-bold"
-                                >
-                                  Save
-                                </button>
-                              </div>
-                            ) : (
-                              <div
-                                onClick={() => handleStartEditProfitLoss(ipo)}
-                                className="flex flex-col items-end gap-0.5 cursor-pointer group/pl"
-                                title="Click to edit Profit/Loss"
-                              >
-                                <div className="inline-flex items-center gap-1">
-                                  <span
-                                    className={`px-2 py-0.5 rounded-full font-mono text-[10px] sm:text-[11px] font-bold border transition ${
-                                      isPositive
-                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 group-hover/pl:bg-emerald-500/20'
-                                        : isNegative
-                                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30 group-hover/pl:bg-rose-500/20'
-                                        : 'bg-slate-800 text-slate-400 border-slate-700'
-                                    }`}
-                                  >
-                                    {isPositive ? '+' : ''}
-                                    {formatCurrency(pl)}
-                                  </span>
-                                  <Edit2 className="w-2.5 h-2.5 text-slate-600 opacity-0 group-hover/pl:opacity-100 transition hidden sm:inline" />
-                                </div>
-
-                                {/* Profit / Loss Percentage based on Lot Cost */}
-                                {ipoPercent !== null ? (
-                                  <span
-                                    className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded ${
-                                      ipoPercent >= 0
-                                        ? 'bg-emerald-500/10 text-emerald-400'
-                                        : 'bg-rose-500/10 text-rose-400'
-                                    }`}
-                                  >
-                                    {ipoPercent > 0 ? '+' : ''}{ipoPercent.toFixed(1)}% Return
-                                  </span>
-                                ) : (
-                                  <span className="text-[9px] text-slate-500">
-                                    {lc <= 0 ? 'Set lot ₹' : '0.0%'}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* 4. Delete Action Button */}
-                          <td className="py-2 px-1 text-center w-8 min-w-[32px]">
-                            <button
-                              onClick={() => handleDeleteIpo(ipo.id)}
-                              className="p-1 text-slate-500 hover:text-rose-400 rounded hover:bg-rose-500/10 transition"
-                              title="Delete IPO entry"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    paginatedIpos.map((ipo) => (
+                      <IpoDesktopRow
+                        key={ipo.id}
+                        ipo={ipo}
+                        persons={persons}
+                        editingLotCostId={editingLotCostId}
+                        lotCostInput={lotCostInput}
+                        onLotCostInputChange={setLotCostInput}
+                        onSaveLotCost={handleSaveLotCost}
+                        onCancelEditLotCost={() => setEditingLotCostId(null)}
+                        onStartEditLotCost={handleStartEditLotCost}
+                        editingProfitLossId={editingProfitLossId}
+                        profitLossInput={profitLossInput}
+                        onProfitLossInputChange={setProfitLossInput}
+                        onSaveProfitLoss={handleSaveProfitLoss}
+                        onCancelEditProfitLoss={() => setEditingProfitLossId(null)}
+                        onStartEditProfitLoss={handleStartEditProfitLoss}
+                        onToggleApplication={handleToggleApplication}
+                        onToggleAllottedWithConfirm={handleToggleAllottedWithConfirm}
+                        onUpdatePersonNotes={handleUpdatePersonNotes}
+                        onDeleteIpo={handleDeleteIpo}
+                        formatDate={formatDate}
+                        formatCurrency={formatCurrency}
+                        calculateIpoPercentage={calculateIpoPercentage}
+                      />
+                    ))
                   )}
                 </tbody>
               </table>
@@ -1764,12 +1323,15 @@ export default function IpoDashboard({ isEmbedded = false }) {
       {/* Modal: Add New Person Column (Rendered in Body Portal for True Viewport Centering) */}
       {isAddPersonOpen && typeof document !== 'undefined' && createPortal(
         <div 
-          onClick={() => setIsAddPersonOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsAddPersonOpen(false);
+          }}
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 animate-slideDown max-h-[90vh] overflow-y-auto"
+            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 animate-slideDown max-h-[90vh] overflow-y-auto my-auto relative z-[100000]"
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
@@ -1878,12 +1440,15 @@ export default function IpoDashboard({ isEmbedded = false }) {
       {/* Modal: Add New IPO Entry (Rendered in Body Portal for True Viewport Centering) */}
       {isAddIpoOpen && typeof document !== 'undefined' && createPortal(
         <div 
-          onClick={() => !isSubmittingIpo && setIsAddIpoOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmittingIpo) setIsAddIpoOpen(false);
+          }}
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 animate-slideDown max-h-[90vh] overflow-y-auto scrollbar-none"
+            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 animate-slideDown max-h-[90vh] overflow-y-auto scrollbar-none my-auto relative z-[100000]"
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
@@ -2018,12 +1583,15 @@ export default function IpoDashboard({ isEmbedded = false }) {
       {/* Modal: Confirmation Dialog when unchecking an already Allotted application */}
       {unallotConfirmModal && typeof document !== 'undefined' && createPortal(
         <div 
-          onClick={() => setUnallotConfirmModal(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setUnallotConfirmModal(null);
+          }}
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="bg-slate-900 border border-amber-500/30 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 animate-slideDown"
+            className="bg-slate-900 border border-amber-500/30 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 animate-slideDown my-auto relative z-[100000]"
           >
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0">
@@ -2136,6 +1704,14 @@ export default function IpoDashboard({ isEmbedded = false }) {
         </div>,
         document.body
       )}
+
+      {/* Modal: Reorder Demat Accounts & Lock Order */}
+      <ReorderPersonsModal
+        isOpen={isReorderPersonsOpen}
+        persons={persons}
+        onSaveOrder={handleSavePersonsOrder}
+        onClose={() => setIsReorderPersonsOpen(false)}
+      />
     </div>
   );
 }

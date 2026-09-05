@@ -61,9 +61,49 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
 
   const [backupStatus, setBackupStatus] = useState(null);
 
-  // Fetch all live data in parallel
+  // Fetch all live data in 1 single high-speed batch roundtrip
   useEffect(() => {
     const fetchAllData = async () => {
+      try {
+        const res = await axios.get('/api/dashboard/summary');
+        if (res.data && res.data.success) {
+          const { ipos: iposData, trades: tradesData, expenses: expData, notes: notesData, buyItems: buyData, backupStatus: bStatus } = res.data;
+
+          if (Array.isArray(iposData)) {
+            setIpos(iposData);
+            cacheManager.set('ipos_list', iposData, 120000);
+            localStorage.setItem('antaryudh_ipo_data', JSON.stringify(iposData));
+          }
+          if (Array.isArray(tradesData)) {
+            setTrades(tradesData);
+            cacheManager.set('trades_list', tradesData, 120000);
+            localStorage.setItem('antaryudh_trading_data', JSON.stringify(tradesData));
+          }
+          if (Array.isArray(expData)) {
+            setExpenses(expData);
+            cacheManager.set('cashflow_transactions', expData, 120000);
+            localStorage.setItem('antaryudh_cashflow_data', JSON.stringify(expData));
+          }
+          if (Array.isArray(notesData)) {
+            setNotes(notesData);
+            cacheManager.set('personal_notes_list', notesData, 120000);
+            localStorage.setItem('antaryudh_cached_notes', JSON.stringify(notesData));
+          }
+          if (Array.isArray(buyData)) {
+            setBuyItems(buyData);
+            cacheManager.set('personal_buy_items_list', buyData, 120000);
+            localStorage.setItem('antaryudh_cached_buy_items', JSON.stringify(buyData));
+          }
+          if (bStatus) {
+            setBackupStatus(bStatus);
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('Dashboard batch summary fallback to individual endpoints:', err.message);
+      }
+
+      // Fallback: Parallel separate endpoints if summary endpoint is unreachable
       try {
         const [ipoRes, tradeRes, expRes, noteRes, buyRes, backupRes] = await Promise.allSettled([
           axios.get('/api/ipos'),
@@ -97,8 +137,8 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
         if (backupRes.status === 'fulfilled' && backupRes.value.data) {
           setBackupStatus(backupRes.value.data);
         }
-      } catch (err) {
-        console.warn('Dashboard fetch sync:', err);
+      } catch (fallbackErr) {
+        console.warn('Dashboard fallback fetch error:', fallbackErr);
       }
     };
 

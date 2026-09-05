@@ -51,6 +51,9 @@ import {
 import TradingAnalysis from './TradingAnalysis';
 import cacheManager from '../utils/cacheManager';
 import { exportTradesToExcel } from '../utils/excelExporter';
+import { TradeDesktopRow } from './trading/TradeDesktopRow';
+import { TradeMobileCard } from './trading/TradeMobileCard';
+import { TradeActionHistory } from './trading/TradeActionHistory';
 
 const API_BASE = '/api/trades';
 const PAGE_SIZE = 10;
@@ -242,6 +245,31 @@ export default function TradingView() {
     setIntradayPage(1);
   }, [searchQuery]);
 
+  // Lock background body scroll and listen for ESC key for any open modal
+  useEffect(() => {
+    const isAnyModalOpen = isModalOpen || partialSellTarget || partialBuyTarget || legsHistoryTarget || deleteTarget;
+    if (!isAnyModalOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsModalOpen(false);
+        setPartialSellTarget(null);
+        setPartialBuyTarget(null);
+        setLegsHistoryTarget(null);
+        setDeleteTarget(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isModalOpen, partialSellTarget, partialBuyTarget, legsHistoryTarget, deleteTarget]);
+
   // Format Currency in INR (₹)
   const formatCurrency = (val) => {
     const num = parseFloat(val) || 0;
@@ -324,6 +352,8 @@ export default function TradingView() {
       const avgSellPrice = totalSellQty > 0 ? totalSellRevenue / totalSellQty : null;
 
       const remainingQty = Math.max(0, totalBuyQty - totalSellQty);
+      const totalBuyCharges = buyLegs.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
+      const totalSellCharges = sellLegs.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
       const totalCharges = rawTx.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
 
       const hasSells = totalSellQty > 0;
@@ -333,8 +363,14 @@ export default function TradingView() {
 
       // Realized cost basis for the sold portion
       const costBasisOfSold = totalSellQty * avgBuyPrice;
-      const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - totalCharges : null;
+      const soldRatio = totalBuyQty > 0 ? Math.min(1, totalSellQty / totalBuyQty) : 0;
+      const realizedBuyCharges = totalBuyCharges * soldRatio;
+      const realizedCharges = totalSellCharges + realizedBuyCharges;
+
+      const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - realizedCharges : null;
       const returnsPercent = hasSells && costBasisOfSold > 0 ? (returnsInr / costBasisOfSold) * 100 : 0;
+
+      const openBuyCharges = Math.max(0, totalBuyCharges - realizedBuyCharges);
 
       const earliestBuyDate = buyLegs[0]?.date || trade.buyDate;
       const latestSellDate = sellLegs[sellLegs.length - 1]?.date || trade.sellDate;
@@ -363,7 +399,10 @@ export default function TradingView() {
         sellValue: hasSells ? totalSellRevenue : null,
         returnsInr,
         returnsPercent,
-        charges: totalCharges,
+        charges: isFullyClosed ? totalCharges : (hasSells ? realizedCharges : totalBuyCharges),
+        totalGrossCharges: totalCharges,
+        realizedCharges,
+        openBuyCharges,
         hasMultiLegs: buyLegs.length > 1 || sellLegs.length > 1 || (buyLegs.length + sellLegs.length > 2),
         buyLegsCount: buyLegs.length,
         sellLegsCount: sellLegs.length,
@@ -1172,192 +1211,20 @@ export default function TradingView() {
                   </button>
                 </div>
               ) : (
-                paginatedItems.map((trade) => {
-                  const {
-                    invested,
-                    totalBuyQty,
-                    avgBuyPrice,
-                    totalSellQty,
-                    avgSellPrice,
-                    remainingQty,
-                    hasSells,
-                    isFullyClosed,
-                    isPartial,
-                    isOpen,
-                    returnsInr,
-                    returnsPercent,
-                    charges,
-                    hasMultiLegs,
-                    legs,
-                    holdingDurationText
-                  } = calculateTradeMetrics(trade);
-
-                  const isProfit = hasSells && returnsInr > 0;
-                  const isLoss = hasSells && returnsInr < 0;
-
-                  return (
-                    <div
-                      key={trade.id}
-                      className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-2.5 shadow-sm"
-                    >
-                      {/* Top Line: Asset + Status + P/L */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                          <span className="font-bold text-white text-xs sm:text-sm font-mono tracking-tight truncate">
-                            {trade.assetName}
-                          </span>
-
-                          {/* Status Badge */}
-                          {isFullyClosed ? (
-                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                              Closed
-                            </span>
-                          ) : isPartial ? (
-                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                              Partial ({totalSellQty}/{totalBuyQty})
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                              Open ({totalBuyQty} Qty)
-                            </span>
-                          )}
-
-                          {/* Multi-leg pill */}
-                          {hasMultiLegs && (
-                            <button
-                              onClick={() => setLegsHistoryTarget(trade)}
-                              className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5 hover:bg-indigo-500/30 transition"
-                            >
-                              <History className="w-2.5 h-2.5" />
-                              <span>{legs.length} Legs</span>
-                            </button>
-                          )}
-                        </div>
-
-                        {/* P&L badge if any portion sold */}
-                        <div className="shrink-0">
-                          {hasSells ? (
-                            <span
-                              className={clsx(
-                                'text-[10px] font-bold px-2 py-0.5 rounded font-mono',
-                                isProfit && 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
-                                isLoss && 'bg-rose-500/15 text-rose-400 border border-rose-500/30',
-                                !isProfit && !isLoss && 'bg-slate-800 text-slate-300'
-                              )}
-                            >
-                              {returnsInr > 0 ? '+' : ''}
-                              {formatCurrency(returnsInr)} ({returnsPercent > 0 ? '+' : ''}
-                              {returnsPercent.toFixed(1)}%)
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/20">
-                              Active Position
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Middle Line: Entry vs Exit Grid */}
-                      <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-900/90 p-2 rounded-lg border border-slate-800/80">
-                        <div>
-                          <span className="text-slate-400 block text-[10px]">
-                            Buy (Avg):
-                          </span>
-                          <span className="font-mono font-medium text-slate-200">
-                            {totalBuyQty} @ {formatCurrency(avgBuyPrice)}
-                          </span>
-                          <span className="text-[10px] text-slate-400 block">
-                            Inv: {formatCurrency(invested)}
-                          </span>
-                        </div>
-
-                        <div>
-                          <span className="text-slate-400 block text-[10px]">
-                            Exit / Realized:
-                          </span>
-                          {hasSells ? (
-                            <>
-                              <span className="font-mono font-medium text-slate-200">
-                                {totalSellQty} @ {formatCurrency(avgSellPrice)}
-                              </span>
-                              <span className="text-[10px] text-amber-300/90 block font-mono">
-                                {remainingQty > 0 ? `${remainingQty} Open Qty` : 'Fully Sold'}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-cyan-400 font-medium italic text-[11px]">
-                              0 Sold • {remainingQty} Open
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Bottom Line: Hold Duration & Actions */}
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Hold Duration Badge */}
-                          <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 flex items-center gap-1">
-                            <Clock className="w-2.5 h-2.5 text-cyan-400" />
-                            <span>Hold: {holdingDurationText}</span>
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded bg-amber-950/40 text-amber-300 border border-amber-500/20">
-                            Fee: {formatCurrency(charges)}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1 shrink-0">
-                          {/* Partial Sell Button */}
-                          {remainingQty > 0 && (
-                            <button
-                              onClick={() => handleOpenPartialSellModal(trade)}
-                              className="px-2 py-1 rounded-lg bg-cyan-950 text-cyan-300 hover:bg-cyan-900 border border-cyan-500/40 text-[10px] font-bold flex items-center gap-1 active:scale-95 shadow-sm"
-                              title="Sell / Exit Partial or Full Quantity"
-                            >
-                              <MinusCircle className="w-3 h-3 text-cyan-400" />
-                              <span>Sell</span>
-                            </button>
-                          )}
-
-                          {/* Add Buy (Accumulate) Button */}
-                          {remainingQty > 0 && (
-                            <button
-                              onClick={() => handleOpenPartialBuyModal(trade)}
-                              className="p-1 rounded-lg text-blue-300 hover:text-white bg-blue-950/60 border border-blue-500/30 active:scale-95"
-                              title="Add Buy / Accumulate Position"
-                            >
-                              <PlusCircle className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {/* View Legs History */}
-                          <button
-                            onClick={() => setLegsHistoryTarget(trade)}
-                            className="p-1 rounded-lg text-indigo-300 hover:text-white bg-indigo-950/60 border border-indigo-500/30 active:scale-95"
-                            title="View Buy/Sell Legs Timeline"
-                          >
-                            <History className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            onClick={() => handleOpenEditModal(trade)}
-                            className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-900 border border-slate-800"
-                            title="Edit trade details"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                          </button>
-
-                          <button
-                            onClick={() => setDeleteTarget(trade)}
-                            className="p-1 rounded-lg text-slate-400 hover:text-rose-400 bg-slate-900 border border-slate-800"
-                            title="Delete trade"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
+                paginatedItems.map((trade) => (
+                  <TradeMobileCard
+                    key={trade.id}
+                    trade={trade}
+                    metrics={calculateTradeMetrics(trade)}
+                    formatDate={formatDate}
+                    formatCurrency={formatCurrency}
+                    onPartialSell={handleOpenPartialSellModal}
+                    onPartialBuy={handleOpenPartialBuyModal}
+                    onViewLegs={setLegsHistoryTarget}
+                    onEdit={handleOpenEditModal}
+                    onDelete={setDeleteTarget}
+                  />
+                ))
               )}
             </div>
 
@@ -1424,276 +1291,20 @@ export default function TradingView() {
                     </tr>
                   ) : (
                     paginatedItems.map((trade) => {
-                      const {
-                        invested,
-                        totalBuyQty,
-                        avgBuyPrice,
-                        totalSellQty,
-                        avgSellPrice,
-                        remainingQty,
-                        hasSells,
-                        isFullyClosed,
-                        isPartial,
-                        isOpen,
-                        sellValue,
-                        returnsInr,
-                        returnsPercent,
-                        charges,
-                        hasMultiLegs,
-                        legs,
-                        holdingDurationText
-                      } = calculateTradeMetrics(trade);
-
-                      const isProfit = hasSells && returnsInr > 0;
-                      const isLoss = hasSells && returnsInr < 0;
-
+                      const metrics = calculateTradeMetrics(trade);
                       return (
-                        <tr
+                        <TradeDesktopRow
                           key={trade.id}
-                          className="hover:bg-slate-800/40 transition-colors group text-slate-200"
-                        >
-                          {/* Asset Name + Status Pill + Legs */}
-                          <td className="py-2.5 px-3.5 font-bold text-white sticky left-0 z-10 bg-slate-900 group-hover:bg-slate-850 border-r border-slate-800/80 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="tracking-tight text-white">{trade.assetName}</span>
-
-                              {isFullyClosed ? (
-                                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-500/30">
-                                  Closed
-                                </span>
-                              ) : isPartial ? (
-                                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-950/90 text-amber-300 border border-amber-500/30">
-                                  Partial
-                                </span>
-                              ) : (
-                                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-500/30">
-                                  Open
-                                </span>
-                              )}
-
-                              {hasMultiLegs && (
-                                <button
-                                  onClick={() => setLegsHistoryTarget(trade)}
-                                  className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/40 transition"
-                                  title="View execution legs"
-                                >
-                                  {legs.length} Legs
-                                </button>
-                              )}
-                            </div>
-                            {trade.notes && (
-                              <div
-                                className="text-[10px] text-slate-400 font-normal truncate max-w-[160px] mt-0.5"
-                                title={trade.notes}
-                              >
-                                {trade.notes}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Buy Date */}
-                          <td className="py-2.5 px-2.5 font-mono text-[11px] text-slate-300 border-r border-slate-800/60">
-                            {formatDate(trade.buyDate)}
-                          </td>
-
-                          {/* Avg Buy Price */}
-                          <td className="py-2.5 px-2.5 font-mono text-right text-slate-200 border-r border-slate-800/60">
-                            <span>{formatCurrency(avgBuyPrice)}</span>
-                          </td>
-
-                          {/* Quantity (Bought / Sold / Open) */}
-                          <td className="py-2.5 px-2 font-mono text-center text-slate-300 border-r border-slate-800/60">
-                            <div className="flex flex-col items-center">
-                              <span className="font-bold text-white">{totalBuyQty} Buy</span>
-                              {hasSells && (
-                                <span className="text-[10px] text-slate-400">
-                                  {totalSellQty} Sold {remainingQty > 0 ? `• ${remainingQty} Open` : ''}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Total Invested Cost */}
-                          <td className="py-2.5 px-2.5 font-mono text-right font-medium text-slate-200 border-r border-slate-800/60">
-                            {formatCurrency(invested)}
-                          </td>
-
-                          {/* Total Charges */}
-                          <td className="py-2.5 px-2 font-mono text-right text-amber-400/90 border-r border-slate-800/60">
-                            {charges > 0 ? formatCurrency(charges) : '₹0'}
-                          </td>
-
-                          {/* Trade Decision */}
-                          <td className="py-2.5 px-2.5 border-r border-slate-800/60 text-center">
-                            <span
-                              className={clsx(
-                                'text-[10px] font-semibold px-2 py-0.5 rounded-full border truncate max-w-[100px] inline-block',
-                                trade.tradeDecision === 'Eagle Eye' &&
-                                  'bg-amber-500/10 text-amber-300 border-amber-500/30',
-                                trade.tradeDecision === 'Telegram' &&
-                                  'bg-cyan-500/10 text-cyan-300 border-cyan-500/30',
-                                trade.tradeDecision === 'Self' &&
-                                  'bg-indigo-500/10 text-indigo-300 border-indigo-500/30',
-                                !['Eagle Eye', 'Telegram', 'Self'].includes(trade.tradeDecision) &&
-                                  'bg-slate-800 text-slate-300 border-slate-700'
-                              )}
-                            >
-                              {trade.tradeDecision}
-                            </span>
-                          </td>
-
-                          {/* Exit Date */}
-                          <td className="py-2.5 px-2.5 font-mono text-[11px] border-r border-slate-800/60">
-                            {trade.sellDate ? (
-                              formatDate(trade.sellDate)
-                            ) : (
-                              <button
-                                onClick={() => handleOpenPartialSellModal(trade)}
-                                className="text-[10px] font-semibold text-cyan-400 hover:text-cyan-300 underline flex items-center gap-0.5"
-                                title="Click to sell / exit position"
-                              >
-                                <MinusCircle className="w-3 h-3" />
-                                <span>Partial Sell</span>
-                              </button>
-                            )}
-                          </td>
-
-                          {/* Holding Duration Column */}
-                          <td className="py-2.5 px-2.5 text-center font-mono text-[11px] border-r border-slate-800/60">
-                            <span
-                              className={clsx(
-                                'px-2 py-0.5 rounded-md font-semibold text-[10px] inline-flex items-center gap-1 border',
-                                isFullyClosed
-                                  ? 'bg-slate-950 text-slate-300 border-slate-800'
-                                  : isPartial
-                                  ? 'bg-amber-950/30 text-amber-300 border-amber-500/30'
-                                  : 'bg-cyan-950/30 text-cyan-300 border-cyan-500/30'
-                              )}
-                              title={`Bought on ${formatDate(trade.buyDate)}${
-                                trade.sellDate ? ` • Sold on ${formatDate(trade.sellDate)}` : ' • Position currently open'
-                              }`}
-                            >
-                              <Clock className="w-2.5 h-2.5 shrink-0 opacity-70" />
-                              <span>{holdingDurationText}</span>
-                            </span>
-                          </td>
-
-                          {/* Avg Sell Price */}
-                          <td className="py-2.5 px-2.5 font-mono text-right border-r border-slate-800/60">
-                            {hasSells ? (
-                              formatCurrency(avgSellPrice)
-                            ) : (
-                              <span className="text-slate-500 italic">Open</span>
-                            )}
-                          </td>
-
-                          {/* Realized Value */}
-                          <td className="py-2.5 px-2.5 font-mono text-right border-r border-slate-800/60">
-                            {hasSells ? (
-                              formatCurrency(sellValue)
-                            ) : (
-                              <span className="text-slate-500 italic">Open</span>
-                            )}
-                          </td>
-
-                          {/* Realized Returns (₹) */}
-                          <td
-                            className={clsx(
-                              'py-2.5 px-3 font-mono font-bold text-right border-r border-slate-800/60',
-                              isProfit && 'text-emerald-400 bg-emerald-500/5',
-                              isLoss && 'text-rose-400 bg-rose-500/5',
-                              !hasSells && 'text-slate-400'
-                            )}
-                          >
-                            {hasSells ? (
-                              <>
-                                {returnsInr > 0 ? '+' : ''}
-                                {formatCurrency(returnsInr)}
-                              </>
-                            ) : (
-                              <span className="text-slate-500 font-normal italic">Open Pos</span>
-                            )}
-                          </td>
-
-                          {/* Realized Returns (%) */}
-                          <td
-                            className={clsx(
-                              'py-2.5 px-2.5 font-mono font-bold text-right border-r border-slate-800/60',
-                              isProfit && 'text-emerald-400',
-                              isLoss && 'text-rose-400',
-                              !hasSells && 'text-slate-500 font-normal'
-                            )}
-                          >
-                            {hasSells ? (
-                              <span
-                                className={clsx(
-                                  'text-[10px] px-1.5 py-0.5 rounded font-mono',
-                                  isProfit &&
-                                    'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-                                  isLoss &&
-                                    'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                                )}
-                              >
-                                {returnsPercent > 0 ? '+' : ''}
-                                {returnsPercent.toFixed(2)}%
-                              </span>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="py-2.5 px-2 text-center sticky right-0 bg-slate-900 group-hover:bg-slate-850 border-l border-slate-800 shadow-[-2px_0_5px_rgba(0,0,0,0.3)]">
-                            <div className="flex items-center justify-center gap-1">
-                              {/* Partial Sell Button */}
-                              {remainingQty > 0 && (
-                                <button
-                                  onClick={() => handleOpenPartialSellModal(trade)}
-                                  className="p-1 rounded text-cyan-400 hover:text-white hover:bg-cyan-900/50 transition"
-                                  title="Record Partial / Full Sell"
-                                >
-                                  <MinusCircle className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-
-                              {/* Partial Buy Button */}
-                              {remainingQty > 0 && (
-                                <button
-                                  onClick={() => handleOpenPartialBuyModal(trade)}
-                                  className="p-1 rounded text-blue-400 hover:text-white hover:bg-blue-900/50 transition"
-                                  title="Add Buy (Accumulate)"
-                                >
-                                  <PlusCircle className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-
-                              {/* Legs History */}
-                              <button
-                                onClick={() => setLegsHistoryTarget(trade)}
-                                className="p-1 rounded text-indigo-400 hover:text-white hover:bg-indigo-900/50 transition"
-                                title="View Execution Legs"
-                              >
-                                <History className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                onClick={() => handleOpenEditModal(trade)}
-                                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
-                                title="Edit trade details"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                onClick={() => setDeleteTarget(trade)}
-                                className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition"
-                                title="Delete trade"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
+                          trade={trade}
+                          metrics={metrics}
+                          formatDate={formatDate}
+                          formatCurrency={formatCurrency}
+                          onPartialSell={handleOpenPartialSellModal}
+                          onPartialBuy={handleOpenPartialBuyModal}
+                          onViewLegs={setLegsHistoryTarget}
+                          onEdit={handleOpenEditModal}
+                          onDelete={setDeleteTarget}
+                        />
                       );
                     })
                   )}
@@ -2004,7 +1615,7 @@ export default function TradingView() {
 
         {/* Tab Switcher & Analysis Shortcut Link */}
         <div className="flex items-center gap-2">
-          <div className="grid grid-cols-3 sm:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 w-full sm:w-auto">
+          <div className="grid grid-cols-2 sm:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 w-full sm:w-auto">
             <button
               onClick={() => setActiveTab('all')}
               className={clsx(
@@ -2034,12 +1645,32 @@ export default function TradingView() {
               <Zap className="w-3 h-3 shrink-0" />
               <span className="truncate">Intraday ({intradayTrades.length})</span>
             </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={clsx(
+                'py-1.5 px-2 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 truncate',
+                activeTab === 'history' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-purple-300'
+              )}
+            >
+              <History className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">History (5)</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* 4. Notion-style Data Grids + Mobile Cards */}
+      {/* 4. Notion-style Data Grids + Mobile Cards + History Tab */}
       <div className="space-y-4 sm:space-y-6">
+        {activeTab === 'history' && (
+          <TradeActionHistory
+            trades={trades}
+            onOpenLegsHistory={setLegsHistoryTarget}
+            onOpenTrade={handleOpenEditModal}
+            formatCurrency={formatCurrency}
+            formatDate={formatDate}
+          />
+        )}
+
         {(activeTab === 'all' || activeTab === 'stock') &&
           renderNotionTradeGrid({
             tradeList: stockTrades,
@@ -2063,6 +1694,16 @@ export default function TradingView() {
             currentPage: intradayPage,
             onPageChange: (p) => setIntradayPage(p)
           })}
+
+        {activeTab === 'all' && (
+          <TradeActionHistory
+            trades={trades}
+            onOpenLegsHistory={setLegsHistoryTarget}
+            onOpenTrade={handleOpenEditModal}
+            formatCurrency={formatCurrency}
+            formatDate={formatDate}
+          />
+        )}
       </div>
 
       {/* ================= ADD / EDIT FULL TRADE MODAL ================= */}

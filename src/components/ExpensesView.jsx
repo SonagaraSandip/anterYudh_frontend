@@ -43,6 +43,7 @@ import {
 import cacheManager from '../utils/cacheManager';
 import ExpenseAnalysis from './ExpenseAnalysis';
 import { exportExpensesToExcel } from '../utils/excelExporter';
+import { ExpenseItemCard } from './expenses/ExpenseItemCard';
 
 const API_BASE = '/api/expenses';
 
@@ -187,6 +188,28 @@ export default function ExpensesView() {
   useEffect(() => {
     fetchTransactions();
   }, []);
+
+  // Lock background body scroll and listen for ESC key for any open modal
+  useEffect(() => {
+    const isAnyModalOpen = isModalOpen || deleteTarget;
+    if (!isAnyModalOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsModalOpen(false);
+        setDeleteTarget(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isModalOpen, deleteTarget]);
 
   // Format Currency (INR)
   const formatCurrency = (val) => {
@@ -1029,84 +1052,16 @@ export default function ExpensesView() {
                   </button>
                 </div>
               ) : (
-                expenseList.map((item) => {
-                  const { date, time } = formatDateTime(item.transactionDate || item.createdAt);
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="p-3 sm:p-3.5 rounded-xl hover:bg-slate-800/50 transition-all duration-200 group flex items-start justify-between gap-2.5 border border-transparent hover:border-slate-800"
-                    >
-                      <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                        <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0 mt-0.5">
-                          <ArrowDownLeft className="w-3.5 h-3.5" />
-                        </div>
-
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight truncate max-w-[170px] sm:max-w-xs">
-                              {item.title}
-                            </h4>
-                            <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-rose-950/80 text-rose-300 border border-rose-500/30 shrink-0">
-                              {item.category}
-                            </span>
-                          </div>
-
-                          {/* Timestamp & Payment Mode Details */}
-                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono flex-wrap">
-                            <span className="flex items-center gap-1 text-slate-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                              <Calendar className="w-2.5 h-2.5 text-rose-400" />
-                              <span>{date}</span>
-                            </span>
-
-                            {time && (
-                              <span className="flex items-center gap-1 text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                                <Clock className="w-2.5 h-2.5 text-slate-500" />
-                                <span>{time}</span>
-                              </span>
-                            )}
-
-                            {item.paymentMode && (
-                              <span className="text-slate-400 truncate max-w-[120px]">
-                                • {item.paymentMode}
-                              </span>
-                            )}
-                          </div>
-
-                          {item.notes && (
-                            <p className="text-[10px] text-slate-400 italic truncate max-w-xs">
-                              "{item.notes}"
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Right: Amount & Actions */}
-                      <div className="text-right shrink-0 space-y-1">
-                        <div className="text-xs sm:text-sm font-black font-mono text-rose-400">
-                          -{formatCurrency(item.amount)}
-                        </div>
-
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleOpenEditModal(item)}
-                            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
-                            title="Edit transaction"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteTarget(item)}
-                            className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition"
-                            title="Delete transaction"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
+                expenseList.map((item) => (
+                  <ExpenseItemCard
+                    key={item.id}
+                    item={item}
+                    formatCurrency={formatCurrency}
+                    formatDateTime={formatDateTime}
+                    onEdit={handleOpenEditModal}
+                    onDelete={setDeleteTarget}
+                  />
+                ))
               )}
             </div>
           </div>
@@ -1177,84 +1132,16 @@ export default function ExpensesView() {
                   </button>
                 </div>
               ) : (
-                incomeList.map((item) => {
-                  const { date, time } = formatDateTime(item.transactionDate || item.createdAt);
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="p-3 sm:p-3.5 rounded-xl hover:bg-slate-800/50 transition-all duration-200 group flex items-start justify-between gap-2.5 border border-transparent hover:border-slate-800"
-                    >
-                      <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                        <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0 mt-0.5">
-                          <ArrowUpRight className="w-3.5 h-3.5" />
-                        </div>
-
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight truncate max-w-[170px] sm:max-w-xs">
-                              {item.title}
-                            </h4>
-                            <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 shrink-0">
-                              {item.category}
-                            </span>
-                          </div>
-
-                          {/* Timestamp & Source Details */}
-                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono flex-wrap">
-                            <span className="flex items-center gap-1 text-slate-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                              <Calendar className="w-2.5 h-2.5 text-emerald-400" />
-                              <span>{date}</span>
-                            </span>
-
-                            {time && (
-                              <span className="flex items-center gap-1 text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                                <Clock className="w-2.5 h-2.5 text-slate-500" />
-                                <span>{time}</span>
-                              </span>
-                            )}
-
-                            {item.paymentMode && (
-                              <span className="text-slate-400 truncate max-w-[120px]">
-                                • {item.paymentMode}
-                              </span>
-                            )}
-                          </div>
-
-                          {item.notes && (
-                            <p className="text-[10px] text-slate-400 italic truncate max-w-xs">
-                              "{item.notes}"
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Right: Amount & Actions */}
-                      <div className="text-right shrink-0 space-y-1">
-                        <div className="text-xs sm:text-sm font-black font-mono text-emerald-400">
-                          +{formatCurrency(item.amount)}
-                        </div>
-
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleOpenEditModal(item)}
-                            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
-                            title="Edit transaction"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteTarget(item)}
-                            className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition"
-                            title="Delete transaction"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
+                incomeList.map((item) => (
+                  <ExpenseItemCard
+                    key={item.id}
+                    item={item}
+                    formatCurrency={formatCurrency}
+                    formatDateTime={formatDateTime}
+                    onEdit={handleOpenEditModal}
+                    onDelete={setDeleteTarget}
+                  />
+                ))
               )}
             </div>
           </div>

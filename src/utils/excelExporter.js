@@ -1,5 +1,15 @@
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
+/**
+ * Dynamic asynchronous loaders for heavy Excel generation libraries (~1MB bundle savings)
+ */
+const getExcelJS = async () => {
+  const mod = await import('exceljs');
+  return mod.default || mod;
+};
+
+const getFileSaver = async () => {
+  const mod = await import('file-saver');
+  return mod.saveAs || mod.default?.saveAs || mod.default;
+};
 
 /**
  * Format date to YYYY-MM-DD string
@@ -177,6 +187,8 @@ export const exportIposToExcel = async (ipos = []) => {
 
   const allPersons = Array.from(personMap.values());
 
+  const ExcelJS = await getExcelJS();
+  const saveAs = await getFileSaver();
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'AntarYudh Financial Suite';
   workbook.created = new Date();
@@ -422,6 +434,8 @@ export const exportExpensesToExcel = async (transactions = [], activeMonth = 'al
     return;
   }
 
+  const ExcelJS = await getExcelJS();
+  const saveAs = await getFileSaver();
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'AntarYudh Financial Suite';
   workbook.created = new Date();
@@ -693,6 +707,8 @@ const calculateTradeDetails = (trade) => {
     const avgSellPrice = totalSellQty > 0 ? totalSellRevenue / totalSellQty : null;
 
     const remainingQty = Math.max(0, totalBuyQty - totalSellQty);
+    const totalBuyCharges = buyLegs.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
+    const totalSellCharges = sellLegs.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
     const totalCharges = rawTx.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
 
     const hasSells = totalSellQty > 0;
@@ -701,7 +717,11 @@ const calculateTradeDetails = (trade) => {
     const status = isFullyClosed ? 'CLOSED' : isPartial ? 'PARTIAL' : 'OPEN';
 
     const costBasisOfSold = totalSellQty * avgBuyPrice;
-    const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - totalCharges : null;
+    const soldRatio = totalBuyQty > 0 ? Math.min(1, totalSellQty / totalBuyQty) : 0;
+    const realizedBuyCharges = totalBuyCharges * soldRatio;
+    const realizedCharges = totalSellCharges + realizedBuyCharges;
+
+    const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - realizedCharges : null;
     const returnsPercent = hasSells && costBasisOfSold > 0 ? (returnsInr / costBasisOfSold) * 100 : 0;
 
     const buyDate = buyLegs[0]?.date || trade.buyDate;
@@ -718,7 +738,7 @@ const calculateTradeDetails = (trade) => {
       remainingQty,
       status,
       realizedValue: hasSells ? Number(totalSellRevenue.toFixed(2)) : '',
-      charges: Number(totalCharges.toFixed(2)),
+      charges: Number((isFullyClosed ? totalCharges : (hasSells ? realizedCharges : totalBuyCharges)).toFixed(2)),
       returnsInr: returnsInr !== null ? Number(returnsInr.toFixed(2)) : '',
       returnsPercent: hasSells ? Number(returnsPercent.toFixed(2)) : '',
       rawTx
@@ -775,6 +795,8 @@ export const exportTradesToExcel = async (trades = []) => {
     return;
   }
 
+  const ExcelJS = await getExcelJS();
+  const saveAs = await getFileSaver();
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'AntarYudh Financial Suite';
   workbook.created = new Date();

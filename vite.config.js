@@ -27,6 +27,9 @@ export default defineConfig({
             if (id.includes('axios')) {
               return 'vendor-axios';
             }
+            if (id.includes('exceljs') || id.includes('file-saver')) {
+              return 'vendor-exceljs';
+            }
             return 'vendor-libs';
           }
         }
