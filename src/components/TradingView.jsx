@@ -53,7 +53,6 @@ import cacheManager from '../utils/cacheManager';
 import { exportTradesToExcel } from '../utils/excelExporter';
 import { TradeDesktopRow } from './trading/TradeDesktopRow';
 import { TradeMobileCard } from './trading/TradeMobileCard';
-import { TradeActionHistory } from './trading/TradeActionHistory';
 
 const API_BASE = '/api/trades';
 const PAGE_SIZE = 10;
@@ -1370,7 +1369,14 @@ export default function TradingView() {
 
   // If in Deep Analysis View Mode, render TradingAnalysis (unconditionally placed after all hooks)
   if (viewMode === 'analysis') {
-    return <TradingAnalysis trades={trades} onBack={() => setViewMode('journal')} />;
+    return (
+      <TradingAnalysis
+        trades={trades}
+        onBack={() => setViewMode('journal')}
+        onOpenLegsHistory={setLegsHistoryTarget}
+        onOpenTrade={handleOpenEditModal}
+      />
+    );
   }
 
   return (
@@ -1381,43 +1387,40 @@ export default function TradingView() {
         <div className="absolute bottom-0 left-1/4 w-60 h-60 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
               <div className="p-2 bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-600 rounded-xl shadow-lg shadow-cyan-600/20 text-white shrink-0">
                 <BarChart2 className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h2 className="text-sm sm:text-base font-black text-white tracking-tight">
                     Trading Journal & Ledger
                   </h2>
-                  <span className="text-[9px] sm:text-[10px] px-2 py-0.2 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-bold font-mono">
-                    Live Analytics & Durations
-                  </span>
                   <span className="text-[9px] sm:text-[10px] px-2 py-0.2 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold font-mono">
-                    Current Active: {formatCurrency(masterStats.totalCurrentInvested)}
+                    Active: {formatCurrency(masterStats.totalCurrentInvested)}
                   </span>
                 </div>
-                <p className="text-[10px] sm:text-xs text-slate-400 font-medium truncate">
+                <p className="text-[10px] sm:text-xs text-slate-400 font-medium truncate hidden sm:block">
                   Holding period tracking, P&L sorting, active capital & multi-leg execution ledger
                 </p>
               </div>
             </div>
 
             {/* Action Buttons: Export + Analyze > + Stock Trade + Intraday (Responsive 2x2 on Mobile, Flex on Desktop) */}
-            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
               <button
                 onClick={() => exportTradesToExcel(trades)}
                 title="Download entire Trading Journal & Ledger in Excel (.xlsx)"
-                className="py-2 px-2.5 sm:px-3 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 text-[11px] sm:text-xs font-bold shadow-sm transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+                className="py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 text-[11px] sm:text-xs font-bold shadow-sm transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
               >
                 <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="truncate">Export Excel</span>
+                <span className="truncate">Export</span>
               </button>
 
               <button
                 onClick={() => setViewMode('analysis')}
-                className="py-2 px-2.5 sm:px-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-indigo-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
+                className="py-1.5 sm:py-2 px-2.5 sm:px-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-indigo-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
                 title="Open Comprehensive Trade Analytics & Strategy Matrix"
               >
                 <PieChart className="w-3.5 h-3.5 shrink-0" />
@@ -1426,141 +1429,162 @@ export default function TradingView() {
 
               <button
                 onClick={() => handleOpenAddModal('stock')}
-                className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-blue-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
+                className="py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-blue-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
               >
                 <TrendingUp className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate"> Stock</span>
+                <span className="truncate">+ Stock</span>
               </button>
 
               <button
                 onClick={() => handleOpenAddModal('intraday')}
-                className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-cyan-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
+                className="py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-cyan-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
               >
                 <Zap className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate"> Intraday</span>
+                <span className="truncate">+ Intra</span>
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Master Dashboard - 4 Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+      {/* 2. Master Dashboard - 4 Summary Cards (100% Mobile Readable, No Truncations) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
         {/* Card 1: Total Stock P/L */}
-        <div className="bg-slate-900/90 border border-blue-500/20 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-md space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
-            <span className="flex items-center gap-1 text-blue-300">
-              <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
-              <span>Stock P/L</span>
-            </span>
-            <span className="text-[9px] font-mono font-bold text-blue-400">
-              {stockTrades.length} trades
-            </span>
+        <div className="bg-slate-900/90 border border-blue-500/20 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
+              <span className="flex items-center gap-1 text-blue-300">
+                <TrendingUp className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span>Stock P/L</span>
+              </span>
+              <span className="text-[9px] font-mono font-bold text-blue-400">
+                {stockTrades.length} trades
+              </span>
+            </div>
+            <div
+              className={clsx(
+                'text-base sm:text-2xl font-black font-mono tracking-tight my-1 sm:my-1.5 truncate',
+                masterStats.stockTotalPl > 0 && 'text-emerald-400',
+                masterStats.stockTotalPl < 0 && 'text-rose-400',
+                masterStats.stockTotalPl === 0 && 'text-slate-200'
+              )}
+            >
+              {masterStats.stockTotalPl > 0 ? '+' : ''}
+              {formatCurrency(masterStats.stockTotalPl)}
+            </div>
           </div>
-          <div
-            className={clsx(
-              'text-lg sm:text-2xl font-black font-mono tracking-tight truncate',
-              masterStats.stockTotalPl > 0 && 'text-emerald-400',
-              masterStats.stockTotalPl < 0 && 'text-rose-400',
-              masterStats.stockTotalPl === 0 && 'text-slate-200'
-            )}
-          >
-            {masterStats.stockTotalPl > 0 ? '+' : ''}
-            {formatCurrency(masterStats.stockTotalPl)}
-          </div>
-          <div className="text-[9px] sm:text-[11px] text-slate-400 flex items-center justify-between gap-1 truncate font-mono">
-            <span className="text-emerald-400 font-semibold" title="Currently deployed in open/unsold positions">
-              Current: {formatCurrency(masterStats.stockCurrentInvested)}
-            </span>
-            <span className="text-slate-500" title="Total lifetime buy capital deployed">
-              Total: {formatCurrency(masterStats.stockInvested)}
-            </span>
+          <div className="pt-1.5 border-t border-slate-800/80 space-y-0.5 text-[9px] sm:text-[10px] font-mono">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Active:</span>
+              <span className="text-emerald-400 font-bold">{formatCurrency(masterStats.stockCurrentInvested)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Invested:</span>
+              <span className="text-slate-300 font-semibold">{formatCurrency(masterStats.stockInvested)}</span>
+            </div>
           </div>
         </div>
 
         {/* Card 2: Total Intraday P/L */}
-        <div className="bg-slate-900/90 border border-cyan-500/20 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-md space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
-            <span className="flex items-center gap-1 text-cyan-300">
-              <Zap className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Intraday P/L</span>
-            </span>
-            <span className="text-[9px] font-mono font-bold text-cyan-400">
-              {intradayTrades.length} setups
-            </span>
+        <div className="bg-slate-900/90 border border-cyan-500/20 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
+              <span className="flex items-center gap-1 text-cyan-300">
+                <Zap className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span>Intraday P/L</span>
+              </span>
+              <span className="text-[9px] font-mono font-bold text-cyan-400">
+                {intradayTrades.length} setups
+              </span>
+            </div>
+            <div
+              className={clsx(
+                'text-base sm:text-2xl font-black font-mono tracking-tight my-1 sm:my-1.5 truncate',
+                masterStats.intradayTotalPl > 0 && 'text-emerald-400',
+                masterStats.intradayTotalPl < 0 && 'text-rose-400',
+                masterStats.intradayTotalPl === 0 && 'text-slate-200'
+              )}
+            >
+              {masterStats.intradayTotalPl > 0 ? '+' : ''}
+              {formatCurrency(masterStats.intradayTotalPl)}
+            </div>
           </div>
-          <div
-            className={clsx(
-              'text-lg sm:text-2xl font-black font-mono tracking-tight truncate',
-              masterStats.intradayTotalPl > 0 && 'text-emerald-400',
-              masterStats.intradayTotalPl < 0 && 'text-rose-400',
-              masterStats.intradayTotalPl === 0 && 'text-slate-200'
-            )}
-          >
-            {masterStats.intradayTotalPl > 0 ? '+' : ''}
-            {formatCurrency(masterStats.intradayTotalPl)}
-          </div>
-          <div className="text-[9px] sm:text-[11px] text-slate-400 flex items-center justify-between gap-1 truncate font-mono">
-            <span className="text-cyan-400 font-semibold" title="Currently deployed in open intraday positions">
-              Current: {formatCurrency(masterStats.intradayCurrentInvested)}
-            </span>
-            <span className="text-slate-500" title="Total lifetime intraday capital">
-              Total: {formatCurrency(masterStats.intradayInvested)}
-            </span>
+          <div className="pt-1.5 border-t border-slate-800/80 space-y-0.5 text-[9px] sm:text-[10px] font-mono">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Active:</span>
+              <span className="text-cyan-400 font-bold">{formatCurrency(masterStats.intradayCurrentInvested)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Invested:</span>
+              <span className="text-slate-300 font-semibold">{formatCurrency(masterStats.intradayInvested)}</span>
+            </div>
           </div>
         </div>
 
         {/* Card 3: Net Overall P/L */}
-        <div className="bg-slate-900/90 border border-emerald-500/20 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-md space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
-            <span className="flex items-center gap-1 text-emerald-300">
-              <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Net Overall</span>
-            </span>
-            {masterStats.overallWinRate !== null && (
-              <span className="text-[9px] font-mono font-bold text-emerald-400">
-                {masterStats.overallWinRate}% Win
+        <div className="bg-slate-900/90 border border-emerald-500/20 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
+              <span className="flex items-center gap-1 text-emerald-300">
+                <Activity className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Net Overall</span>
               </span>
-            )}
+              {masterStats.overallWinRate !== null && (
+                <span className="text-[9px] font-mono font-bold text-emerald-400">
+                  {masterStats.overallWinRate}% Win
+                </span>
+              )}
+            </div>
+            <div
+              className={clsx(
+                'text-base sm:text-2xl font-black font-mono tracking-tight my-1 sm:my-1.5 truncate',
+                masterStats.netOverallPl > 0 && 'text-emerald-400',
+                masterStats.netOverallPl < 0 && 'text-rose-400',
+                masterStats.netOverallPl === 0 && 'text-slate-200'
+              )}
+            >
+              {masterStats.netOverallPl > 0 ? '+' : ''}
+              {formatCurrency(masterStats.netOverallPl)}
+            </div>
           </div>
-          <div
-            className={clsx(
-              'text-lg sm:text-2xl font-black font-mono tracking-tight truncate',
-              masterStats.netOverallPl > 0 && 'text-emerald-400',
-              masterStats.netOverallPl < 0 && 'text-rose-400',
-              masterStats.netOverallPl === 0 && 'text-slate-200'
-            )}
-          >
-            {masterStats.netOverallPl > 0 ? '+' : ''}
-            {formatCurrency(masterStats.netOverallPl)}
-          </div>
-          <div className="text-[9px] sm:text-[11px] text-slate-400 flex items-center justify-between gap-1 truncate font-mono">
-            <span className="text-emerald-400 font-semibold" title="Total active capital across all open positions">
-              Active: {formatCurrency(masterStats.totalCurrentInvested)}
-            </span>
-            <span className="text-slate-500" title="Total cumulative capital deployed">
-              Total: {formatCurrency(masterStats.totalInvested)}
-            </span>
+          <div className="pt-1.5 border-t border-slate-800/80 space-y-0.5 text-[9px] sm:text-[10px] font-mono">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Active:</span>
+              <span className="text-emerald-400 font-bold">{formatCurrency(masterStats.totalCurrentInvested)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Total Deploy:</span>
+              <span className="text-slate-300 font-semibold">{formatCurrency(masterStats.totalInvested)}</span>
+            </div>
           </div>
         </div>
 
         {/* Card 4: Total Charges & Brokerage Paid */}
-        <div className="bg-slate-900/90 border border-amber-500/20 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-md space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
-            <span className="flex items-center gap-1 text-amber-300">
-              <Receipt className="w-3.5 h-3.5 text-amber-400" />
-              <span>Total Charges</span>
-            </span>
-            <span className="text-[9px] font-mono font-bold text-amber-400">
-              Taxes & Fees
-            </span>
+        <div className="bg-slate-900/90 border border-amber-500/20 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
+              <span className="flex items-center gap-1 text-amber-300">
+                <Receipt className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Total Charges</span>
+              </span>
+              <span className="text-[9px] font-mono font-bold text-amber-400">
+                Taxes & Fees
+              </span>
+            </div>
+            <div className="text-base sm:text-2xl font-black font-mono tracking-tight text-amber-400 my-1 sm:my-1.5 truncate">
+              {formatCurrency(masterStats.totalChargesPaid)}
+            </div>
           </div>
-          <div className="text-lg sm:text-2xl font-black font-mono tracking-tight text-amber-400 truncate">
-            {formatCurrency(masterStats.totalChargesPaid)}
+          <div className="pt-1.5 border-t border-slate-800/80 space-y-0.5 text-[9px] sm:text-[10px] font-mono">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Delivery:</span>
+              <span className="text-slate-300 font-semibold">{formatCurrency(masterStats.stockCharges)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Intraday:</span>
+              <span className="text-slate-300 font-semibold">{formatCurrency(masterStats.intradayCharges)}</span>
+            </div>
           </div>
-          <p className="text-[9px] sm:text-[11px] text-slate-400 truncate font-mono">
-            Stock: {formatCurrency(masterStats.stockCharges)} • Intra: {formatCurrency(masterStats.intradayCharges)}
-          </p>
         </div>
       </div>
 
@@ -1615,11 +1639,11 @@ export default function TradingView() {
 
         {/* Tab Switcher & Analysis Shortcut Link */}
         <div className="flex items-center gap-2">
-          <div className="grid grid-cols-2 sm:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 w-full sm:w-auto">
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 w-full sm:w-auto">
             <button
               onClick={() => setActiveTab('all')}
               className={clsx(
-                'py-1.5 px-2 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition text-center truncate',
+                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition text-center truncate',
                 activeTab === 'all' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
               )}
             >
@@ -1628,7 +1652,7 @@ export default function TradingView() {
             <button
               onClick={() => setActiveTab('stock')}
               className={clsx(
-                'py-1.5 px-2 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 truncate',
+                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 truncate',
                 activeTab === 'stock' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-blue-300'
               )}
             >
@@ -1638,39 +1662,19 @@ export default function TradingView() {
             <button
               onClick={() => setActiveTab('intraday')}
               className={clsx(
-                'py-1.5 px-2 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 truncate',
+                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 truncate',
                 activeTab === 'intraday' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-cyan-300'
               )}
             >
               <Zap className="w-3 h-3 shrink-0" />
               <span className="truncate">Intraday ({intradayTrades.length})</span>
             </button>
-            <button
-              onClick={() => setActiveTab('history')}
-              className={clsx(
-                'py-1.5 px-2 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 truncate',
-                activeTab === 'history' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-purple-300'
-              )}
-            >
-              <History className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">History (5)</span>
-            </button>
           </div>
         </div>
       </div>
 
-      {/* 4. Notion-style Data Grids + Mobile Cards + History Tab */}
+      {/* 4. Notion-style Data Grids + Mobile Cards */}
       <div className="space-y-4 sm:space-y-6">
-        {activeTab === 'history' && (
-          <TradeActionHistory
-            trades={trades}
-            onOpenLegsHistory={setLegsHistoryTarget}
-            onOpenTrade={handleOpenEditModal}
-            formatCurrency={formatCurrency}
-            formatDate={formatDate}
-          />
-        )}
-
         {(activeTab === 'all' || activeTab === 'stock') &&
           renderNotionTradeGrid({
             tradeList: stockTrades,
@@ -1694,16 +1698,6 @@ export default function TradingView() {
             currentPage: intradayPage,
             onPageChange: (p) => setIntradayPage(p)
           })}
-
-        {activeTab === 'all' && (
-          <TradeActionHistory
-            trades={trades}
-            onOpenLegsHistory={setLegsHistoryTarget}
-            onOpenTrade={handleOpenEditModal}
-            formatCurrency={formatCurrency}
-            formatDate={formatDate}
-          />
-        )}
       </div>
 
       {/* ================= ADD / EDIT FULL TRADE MODAL ================= */}

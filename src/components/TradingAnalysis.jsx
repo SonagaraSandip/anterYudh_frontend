@@ -37,6 +37,7 @@ import {
   Timer,
   CalendarDays
 } from 'lucide-react';
+import { TradeActionHistory } from './trading/TradeActionHistory';
 
 const DECISION_PRESETS = [
   'Eagle Eye',
@@ -49,7 +50,12 @@ const DECISION_PRESETS = [
   'News / Earnings Catalyst'
 ];
 
-export default function TradingAnalysis({ trades = [], onBack }) {
+export default function TradingAnalysis({
+  trades = [],
+  onBack,
+  onOpenLegsHistory,
+  onOpenTrade
+}) {
   // Quick Rolling Timeframe Filter State: 'all' | '30d' | '3m' | '6m'
   const [timeframeFilter, setTimeframeFilter] = useState('all');
 
@@ -591,18 +597,23 @@ export default function TradingAnalysis({ trades = [], onBack }) {
     return buckets;
   }, [filteredTrades]);
 
-  // Top 3 Best & Top 3 Worst Trades
+  // Top 3 Best Winners (> 0) & Top 3 Worst Drawdowns (< 0)
   const { topGainers, topLosers } = useMemo(() => {
     const closed = filteredTrades
       .map((t) => ({ ...t, metrics: calculateTradeMetrics(t) }))
       .filter((t) => t.metrics.hasSells && t.metrics.returnsInr !== null);
 
-    const sortedAsc = [...closed].sort((a, b) => a.metrics.returnsInr - b.metrics.returnsInr);
-    const sortedDesc = [...closed].sort((a, b) => b.metrics.returnsInr - a.metrics.returnsInr);
+    const winners = closed
+      .filter((t) => t.metrics.returnsInr > 0)
+      .sort((a, b) => b.metrics.returnsInr - a.metrics.returnsInr);
+
+    const losers = closed
+      .filter((t) => t.metrics.returnsInr < 0)
+      .sort((a, b) => a.metrics.returnsInr - b.metrics.returnsInr);
 
     return {
-      topGainers: sortedDesc.slice(0, 3),
-      topLosers: sortedAsc.slice(0, 3)
+      topGainers: winners.slice(0, 3),
+      topLosers: losers.slice(0, 3)
     };
   }, [filteredTrades]);
 
@@ -815,7 +826,16 @@ export default function TradingAnalysis({ trades = [], onBack }) {
         </div>
       </div>
 
-      {/* 3. Analytical Interactive Filters Bar (Collapsible on Mobile) */}
+      {/* 3. Last 5 Action History (Loaded Exclusively on the Analyze Page) */}
+      <TradeActionHistory
+        trades={trades}
+        onOpenLegsHistory={onOpenLegsHistory}
+        onOpenTrade={onOpenTrade}
+        formatCurrency={formatCurrency}
+        formatDate={formatDate}
+      />
+
+      {/* 4. Analytical Interactive Filters Bar (Collapsible on Mobile) */}
       <div className="bg-slate-900/90 border border-slate-800 p-3 sm:p-4 rounded-2xl shadow-xl space-y-2.5">
         <div
           onClick={() => setIsFilterExpandedMobile(!isFilterExpandedMobile)}

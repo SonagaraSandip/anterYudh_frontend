@@ -74,26 +74,39 @@ export const NoteCard = React.memo(function NoteCard({
 
           {/* Right Corner Action Icons (Copy, Edit, Delete) */}
           <div className="flex items-center gap-0.5 sm:gap-1 shrink-0 bg-black/30 backdrop-blur-sm p-0.5 sm:p-1 rounded-lg border border-white/5 opacity-90 group-hover:opacity-100 transition">
-            {/* Copy Button */}
+            {/* Copy Button (Protected with PIN for secret notes) */}
             <button
               type="button"
               onClick={() => onCopy(note)}
-              className="p-1 sm:p-1.5 rounded text-slate-300 hover:text-white hover:bg-white/10 transition active:scale-90 touch-manipulation"
-              title={isCopied ? 'Copied!' : 'Copy Note Text'}
+              className={clsx(
+                'p-1 sm:p-1.5 rounded transition active:scale-90 touch-manipulation',
+                note.isSecret && !isRevealed
+                  ? 'text-slate-400 hover:text-amber-300 hover:bg-amber-500/10'
+                  : 'text-slate-300 hover:text-white hover:bg-white/10'
+              )}
+              title={
+                note.isSecret && !isRevealed
+                  ? 'Protected: Enter PIN to copy'
+                  : isCopied
+                  ? 'Copied!'
+                  : 'Copy Note Text'
+              }
             >
               {isCopied ? (
                 <Check className="w-3.5 h-3.5 text-emerald-400 animate-scaleIn" />
+              ) : note.isSecret && !isRevealed ? (
+                <Lock className="w-3.5 h-3.5 text-amber-400/90" />
               ) : (
                 <Copy className="w-3.5 h-3.5" />
               )}
             </button>
 
-            {/* Edit Button */}
+            {/* Edit Button (Protected with PIN for secret notes) */}
             <button
               type="button"
               onClick={() => onEdit(note)}
               className="p-1 sm:p-1.5 rounded text-slate-300 hover:text-white hover:bg-white/10 transition active:scale-90 touch-manipulation"
-              title="Edit Note"
+              title={note.isSecret && !isRevealed ? 'Protected: Enter PIN to edit' : 'Edit Note'}
             >
               <Edit3 className="w-3.5 h-3.5" />
             </button>

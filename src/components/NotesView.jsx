@@ -135,7 +135,9 @@ export default function NotesView() {
   const [pinModalState, setPinModalState] = useState({
     isOpen: false,
     noteId: null,
-    noteTitle: ''
+    noteTitle: '',
+    actionAfterUnlock: null,
+    targetNote: null
   });
   // Copied feedback map (noteId -> boolean)
   const [copiedNoteId, setCopiedNoteId] = useState(null);
@@ -257,9 +259,22 @@ export default function NotesView() {
     }
   };
 
-  // Copy Note Content to Clipboard
+  // Copy Note Content to Clipboard (Protected with 5-digit PIN for locked secret notes)
   const handleCopyNote = (note) => {
     if (!note || !note.content) return;
+
+    // If secret note is locked, require PIN before exposing/copying plain text
+    if (note.isSecret && !revealedSecrets[note.id]) {
+      setPinModalState({
+        isOpen: true,
+        noteId: note.id,
+        noteTitle: note.title,
+        actionAfterUnlock: 'copy',
+        targetNote: note
+      });
+      return;
+    }
+
     navigator.clipboard.writeText(note.content);
     setCopiedNoteId(note.id);
     setTimeout(() => {
@@ -282,9 +297,26 @@ export default function NotesView() {
       setPinModalState({
         isOpen: true,
         noteId: note.id,
-        noteTitle: note.title
+        noteTitle: note.title,
+        actionAfterUnlock: null,
+        targetNote: null
       });
     }
+  };
+
+  // Edit Note Request (Protected with 5-digit PIN for locked secret notes)
+  const handleEditNoteRequest = (note = null) => {
+    if (note && note.isSecret && !revealedSecrets[note.id]) {
+      setPinModalState({
+        isOpen: true,
+        noteId: note.id,
+        noteTitle: note.title,
+        actionAfterUnlock: 'edit',
+        targetNote: note
+      });
+      return;
+    }
+    handleOpenNoteModal(note);
   };
 
   // Toggle Note Pin
@@ -722,7 +754,7 @@ export default function NotesView() {
                     onTogglePin={handleTogglePin}
                     onToggleReveal={handleToggleReveal}
                     onCopy={handleCopyNote}
-                    onEdit={handleOpenNoteModal}
+                    onEdit={handleEditNoteRequest}
                     onDelete={setNoteDeleteTarget}
                     formatDate={formatDate}
                   />
@@ -1206,17 +1238,35 @@ export default function NotesView() {
         targetNoteTitle={pinModalState.noteTitle}
         onSuccess={() => {
           if (pinModalState.noteId) {
+            const targetId = pinModalState.noteId;
+            const target = pinModalState.targetNote;
+            const action = pinModalState.actionAfterUnlock;
+
             setRevealedSecrets((prev) => ({
               ...prev,
-              [pinModalState.noteId]: true
+              [targetId]: true
             }));
+
+            // If user initiated action via Copy, copy immediately after successful PIN verification
+            if (action === 'copy' && target?.content) {
+              navigator.clipboard.writeText(target.content);
+              setCopiedNoteId(targetId);
+              setTimeout(() => {
+                setCopiedNoteId(null);
+              }, 2000);
+            } else if (action === 'edit' && target) {
+              // If user initiated action via Edit, open edit modal after successful PIN verification
+              handleOpenNoteModal(target);
+            }
           }
         }}
         onClose={() =>
           setPinModalState({
             isOpen: false,
             noteId: null,
-            noteTitle: ''
+            noteTitle: '',
+            actionAfterUnlock: null,
+            targetNote: null
           })
         }
       />
