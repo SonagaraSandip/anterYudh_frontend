@@ -231,90 +231,139 @@ export default function GrowthView() {
     return { total, reading, completed, wantToRead };
   }, [books]);
 
+  // Mobile View Switcher ('all' | 'skills' | 'books')
+  const [mobileActiveView, setMobileActiveView] = useState('all');
+
   return (
-    <div className="space-y-4 sm:space-y-6 animate-fadeIn font-sans max-w-full">
-      {/* 1. Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 p-4 sm:p-6 shadow-2xl">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+    <div className="space-y-3 sm:space-y-5 animate-fadeIn font-sans max-w-full overflow-hidden">
+      {/* 1. Header Banner (Clean, mobile-optimized padding) */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 p-3.5 sm:p-5 shadow-2xl">
+        <div className="absolute top-0 right-0 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
         <div className="absolute bottom-0 left-1/3 w-60 h-60 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="p-1.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
-                <Sparkles className="w-4 h-4" />
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="p-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+                <Sparkles className="w-3.5 h-3.5" />
               </span>
-              <h2 className="text-xs font-black uppercase tracking-wider text-slate-300 font-mono">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-300 font-mono">
                 Knowledge & Mastery Hub
-              </h2>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold font-mono">
+              </span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-bold font-mono">
                 Skills & Reading
               </span>
             </div>
 
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-white font-mono">
+            <h1 className="text-base sm:text-xl md:text-2xl font-black tracking-tight text-white font-mono">
               Skills Roadmap & Books To Read
             </h1>
 
-            <p className="text-xs text-slate-400">
+            <p className="text-[11px] sm:text-xs text-slate-400 hidden sm:block">
               Track skill acquisition pipelines side-by-side with reading lists, key takeaways, and learning milestones.
             </p>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <div className="grid grid-cols-2 sm:flex items-center gap-2 shrink-0">
             <button
               onClick={() => { setEditingSkill(null); setSkillModalOpen(true); }}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-xs shadow-lg shadow-indigo-500/20 transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-xs shadow-md shadow-indigo-500/20 transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <GraduationCap className="w-4 h-4" />
+              <GraduationCap className="w-3.5 h-3.5" />
               <span>+ Add Skill</span>
             </button>
 
             <button
               onClick={() => { setEditingBook(null); setBookModalOpen(true); }}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 via-orange-500 to-rose-500 hover:from-amber-500 hover:to-orange-400 text-white font-bold text-xs shadow-lg shadow-amber-500/20 transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-600 via-orange-500 to-rose-500 hover:from-amber-500 hover:to-orange-400 text-white font-bold text-xs shadow-md shadow-amber-500/20 transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <BookOpen className="w-4 h-4" />
+              <BookOpen className="w-3.5 h-3.5" />
               <span>+ Add Book</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Sub-Tab Navigation Switcher (Only visible on mobile screens < lg) */}
+        <div className="lg:hidden mt-3 pt-2.5 border-t border-slate-800/80">
+          <div className="grid grid-cols-3 gap-1 bg-slate-950/90 p-1 rounded-xl border border-slate-800/90">
+            <button
+              type="button"
+              onClick={() => setMobileActiveView('skills')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-bold font-mono transition flex items-center justify-center gap-1 cursor-pointer ${
+                mobileActiveView === 'skills'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span className="truncate">Skills ({skills.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileActiveView('books')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-bold font-mono transition flex items-center justify-center gap-1 cursor-pointer ${
+                mobileActiveView === 'books'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span className="truncate">Books ({books.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileActiveView('all')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-bold font-mono transition flex items-center justify-center gap-1 cursor-pointer ${
+                mobileActiveView === 'all'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span className="truncate">Both</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* 2. Side-by-Side Dual Column Grid (Left: Skills to Learn, Right: Books to Read) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-6 items-start">
         
         {/* ========================================================= */}
         {/* LEFT COLUMN: SKILLS TO LEARN */}
         {/* ========================================================= */}
-        <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3.5 sm:p-5 shadow-xl space-y-4">
+        <div className={`bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3 sm:p-5 shadow-xl space-y-3 sm:space-y-4 ${
+          mobileActiveView === 'books' ? 'hidden lg:block' : 'block'
+        }`}>
           {/* Section Header */}
-          <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 shrink-0">
-                <GraduationCap className="w-5 h-5" />
+          <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="p-1.5 sm:p-2 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 shrink-0">
+                <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+              <div className="min-w-0">
+                <h3 className="text-xs sm:text-base font-bold text-white flex items-center gap-1.5 truncate">
                   <span>Skills To Learn</span>
-                  <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold">
+                  <span className="text-[10px] sm:text-xs font-mono px-1.5 py-0.2 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold shrink-0">
                     {skills.length}
                   </span>
                 </h3>
-                <div className="flex items-center gap-2 text-[10px] sm:text-[11px] text-slate-400 font-mono">
+                <div className="flex items-center gap-1.5 text-[9px] sm:text-[11px] text-slate-400 font-mono truncate">
                   <span className="text-cyan-400 font-bold">{skillStats.learning} Learning</span>
                   <span>•</span>
-                  <span>{skillStats.planned} Planned</span>
+                  <span>{skillStats.planned} Plan</span>
                   <span>•</span>
-                  <span className="text-emerald-400">{skillStats.completed} Mastered</span>
+                  <span className="text-emerald-400">{skillStats.completed} Done</span>
                 </div>
               </div>
             </div>
 
             <button
               onClick={() => { setEditingSkill(null); setSkillModalOpen(true); }}
-              className="px-2.5 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-xs font-bold font-mono transition flex items-center gap-1 cursor-pointer"
+              className="px-2.5 py-1 sm:py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-[11px] sm:text-xs font-bold font-mono transition flex items-center gap-1 shrink-0 cursor-pointer active:scale-95"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New</span>
@@ -324,13 +373,13 @@ export default function GrowthView() {
           {/* Search & Status Filters */}
           <div className="space-y-2">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search skills, categories, notes..."
                 value={skillSearch}
                 onChange={(e) => setSkillSearch(e.target.value)}
-                className="w-full pl-8.5 pr-3 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
               />
               {skillSearch && (
                 <button
@@ -342,14 +391,14 @@ export default function GrowthView() {
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs no-scrollbar">
               {['All', 'Learning', 'Planned', 'Completed'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setSkillFilter(tab)}
-                  className={`px-2.5 py-1 rounded-lg font-mono text-[11px] font-bold transition whitespace-nowrap cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg font-mono text-[10px] sm:text-[11px] font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
                     skillFilter === tab
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                      ? 'bg-indigo-600 text-white shadow-sm'
                       : 'bg-slate-950/60 text-slate-400 hover:text-white hover:bg-slate-800/60 border border-slate-800'
                   }`}
                 >
@@ -362,8 +411,8 @@ export default function GrowthView() {
           {/* Skills Cards List */}
           <div className="space-y-2.5 max-h-[650px] overflow-y-auto pr-1">
             {filteredSkills.length === 0 ? (
-              <div className="p-8 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 space-y-2">
-                <GraduationCap className="w-8 h-8 text-slate-600 mx-auto" />
+              <div className="p-6 sm:p-8 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 space-y-2">
+                <GraduationCap className="w-7 h-7 sm:w-8 sm:h-8 text-slate-600 mx-auto" />
                 <p className="text-xs text-slate-400 font-medium">No skills found matching filter.</p>
                 <button
                   onClick={() => { setEditingSkill(null); setSkillModalOpen(true); }}
@@ -391,15 +440,15 @@ export default function GrowthView() {
                     {/* Top Row: Title + Category Badge + Actions */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-1 min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight break-words">
                             {skill.name}
                           </h4>
-                          <span className="text-[10px] px-2 py-0.2 rounded-md font-mono font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                          <span className="text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-md font-mono font-medium bg-slate-800 text-slate-300 border border-slate-700">
                             {skill.category || 'Skill'}
                           </span>
                           {skill.priority === 'High' && (
-                            <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                            <span className="text-[8px] sm:text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
                               High Priority
                             </span>
                           )}
@@ -414,17 +463,17 @@ export default function GrowthView() {
                       </div>
 
                       {/* Edit / Delete Buttons */}
-                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition shrink-0">
+                      <div className="flex items-center gap-0.5 sm:gap-1 opacity-90 group-hover:opacity-100 transition shrink-0">
                         <button
                           onClick={() => { setEditingSkill(skill); setSkillModalOpen(true); }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition"
+                          className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition active:scale-90"
                           title="Edit Skill"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => setDeleteConfirm({ type: 'skill', id: skill.id, title: skill.name })}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
+                          className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition active:scale-90"
                           title="Delete Skill"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -433,13 +482,13 @@ export default function GrowthView() {
                     </div>
 
                     {/* Progress Bar & Quick Adjust */}
-                    <div className="mt-2.5 pt-2 border-t border-slate-800/60 space-y-1.5">
-                      <div className="flex items-center justify-between text-[11px] font-mono">
+                    <div className="mt-2 pt-2 border-t border-slate-800/60 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-mono">
                         <span className="text-slate-400">Mastery Progress</span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => handleSkillProgressStep(skill.id, skill.progress || 0, -10)}
-                            className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition"
+                            className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] sm:text-[10px] transition active:scale-95"
                             title="-10%"
                           >
                             -10%
@@ -449,7 +498,7 @@ export default function GrowthView() {
                           </span>
                           <button
                             onClick={() => handleSkillProgressStep(skill.id, skill.progress || 0, 10)}
-                            className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition"
+                            className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] sm:text-[10px] transition active:scale-95"
                             title="+10%"
                           >
                             +10%
@@ -457,7 +506,7 @@ export default function GrowthView() {
                         </div>
                       </div>
 
-                      <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                      <div className="w-full h-1.5 sm:h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
                         <div
                           className={`h-full transition-all duration-300 ${
                             isCompleted
@@ -470,13 +519,13 @@ export default function GrowthView() {
                     </div>
 
                     {/* Status Toggle Buttons */}
-                    <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap text-[10px] font-mono">
+                    <div className="mt-2 flex items-center justify-between gap-1.5 flex-wrap text-[9px] sm:text-[10px] font-mono">
                       <div className="flex items-center gap-1">
                         {['Planned', 'Learning', 'Completed'].map((st) => (
                           <button
                             key={st}
                             onClick={() => handleSkillStatusChange(skill.id, st)}
-                            className={`px-2 py-0.5 rounded-md border transition cursor-pointer ${
+                            className={`px-1.5 sm:px-2 py-0.5 rounded-md border transition cursor-pointer active:scale-95 ${
                               skill.status === st
                                 ? st === 'Completed'
                                   ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold'
@@ -492,7 +541,7 @@ export default function GrowthView() {
                       </div>
 
                       {skill.resources && (
-                        <span className="text-[10px] text-cyan-400/90 truncate max-w-[150px]" title={skill.resources}>
+                        <span className="text-[9px] sm:text-[10px] text-cyan-400/90 truncate max-w-[140px]" title={skill.resources}>
                           🔗 {skill.resources}
                         </span>
                       )}
@@ -500,7 +549,7 @@ export default function GrowthView() {
 
                     {/* Notes Snippet */}
                     {skill.notes && (
-                      <p className="mt-2 text-[11px] text-slate-400 bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 whitespace-pre-wrap">
+                      <p className="mt-1.5 text-[10px] sm:text-[11px] text-slate-400 bg-slate-900/60 p-2 rounded-lg border border-slate-800/60 whitespace-pre-wrap break-words">
                         {skill.notes}
                       </p>
                     )}
@@ -514,33 +563,35 @@ export default function GrowthView() {
         {/* ========================================================= */}
         {/* RIGHT COLUMN: BOOKS TO READ */}
         {/* ========================================================= */}
-        <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3.5 sm:p-5 shadow-xl space-y-4">
+        <div className={`bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3 sm:p-5 shadow-xl space-y-3 sm:space-y-4 ${
+          mobileActiveView === 'skills' ? 'hidden lg:block' : 'block'
+        }`}>
           {/* Section Header */}
-          <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
-                <BookOpen className="w-5 h-5" />
+          <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="p-1.5 sm:p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+                <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+              <div className="min-w-0">
+                <h3 className="text-xs sm:text-base font-bold text-white flex items-center gap-1.5 truncate">
                   <span>Books To Read</span>
-                  <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                  <span className="text-[10px] sm:text-xs font-mono px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold shrink-0">
                     {books.length}
                   </span>
                 </h3>
-                <div className="flex items-center gap-2 text-[10px] sm:text-[11px] text-slate-400 font-mono">
+                <div className="flex items-center gap-1.5 text-[9px] sm:text-[11px] text-slate-400 font-mono truncate">
                   <span className="text-amber-400 font-bold">{bookStats.reading} Reading</span>
                   <span>•</span>
-                  <span>{bookStats.wantToRead} Want to Read</span>
+                  <span>{bookStats.wantToRead} Wish</span>
                   <span>•</span>
-                  <span className="text-emerald-400">{bookStats.completed} Finished</span>
+                  <span className="text-emerald-400">{bookStats.completed} Done</span>
                 </div>
               </div>
             </div>
 
             <button
               onClick={() => { setEditingBook(null); setBookModalOpen(true); }}
-              className="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-bold font-mono transition flex items-center gap-1 cursor-pointer"
+              className="px-2.5 py-1 sm:py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] sm:text-xs font-bold font-mono transition flex items-center gap-1 shrink-0 cursor-pointer active:scale-95"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New</span>
@@ -550,13 +601,13 @@ export default function GrowthView() {
           {/* Search & Status Filters */}
           <div className="space-y-2">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search books, authors, genres, takeaways..."
                 value={bookSearch}
                 onChange={(e) => setBookSearch(e.target.value)}
-                className="w-full pl-8.5 pr-3 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+                className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
               />
               {bookSearch && (
                 <button
@@ -568,14 +619,14 @@ export default function GrowthView() {
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs no-scrollbar">
               {['All', 'Reading', 'Want to Read', 'Completed'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setBookFilter(tab)}
-                  className={`px-2.5 py-1 rounded-lg font-mono text-[11px] font-bold transition whitespace-nowrap cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg font-mono text-[10px] sm:text-[11px] font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
                     bookFilter === tab
-                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                      ? 'bg-amber-600 text-white shadow-sm'
                       : 'bg-slate-950/60 text-slate-400 hover:text-white hover:bg-slate-800/60 border border-slate-800'
                   }`}
                 >
@@ -588,8 +639,8 @@ export default function GrowthView() {
           {/* Books Cards List */}
           <div className="space-y-2.5 max-h-[650px] overflow-y-auto pr-1">
             {filteredBooks.length === 0 ? (
-              <div className="p-8 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 space-y-2">
-                <BookOpen className="w-8 h-8 text-slate-600 mx-auto" />
+              <div className="p-6 sm:p-8 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 space-y-2">
+                <BookOpen className="w-7 h-7 sm:w-8 sm:h-8 text-slate-600 mx-auto" />
                 <p className="text-xs text-slate-400 font-medium">No books found matching filter.</p>
                 <button
                   onClick={() => { setEditingBook(null); setBookModalOpen(true); }}
@@ -598,6 +649,7 @@ export default function GrowthView() {
                   + Add your first book
                 </button>
               </div>
+
             ) : (
               filteredBooks.map((book) => {
                 const isCompleted = book.status === 'Completed';
