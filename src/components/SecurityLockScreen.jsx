@@ -8,7 +8,9 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
-  Database
+  Database,
+  Clock,
+  Shield
 } from 'lucide-react';
 
 const APP_MASTER_PASSWORD = '30009142'; // 8-Digit Master Passcode
@@ -135,9 +137,15 @@ export default function SecurityLockScreen({
             </span>
           </div>
 
-          <div className="text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-300 border border-slate-700/60 flex items-center gap-1 shrink-0">
-            <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-indigo-400" />
-            <span>Master Lock</span>
+          <div className="flex items-center gap-1.5">
+            <div className="text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 shrink-0">
+              <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-indigo-400" />
+              <span>30m Session</span>
+            </div>
+            <div className="text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-300 border border-slate-700/60 flex items-center gap-1 shrink-0">
+              <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-indigo-400" />
+              <span>Lock</span>
+            </div>
           </div>
         </div>
 
@@ -168,7 +176,7 @@ export default function SecurityLockScreen({
             </span>
           </h2>
           <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
-            Enter 8-digit passcode to unlock
+            Enter 8-digit passcode • Unlocks 30-min active session
           </p>
         </div>
 

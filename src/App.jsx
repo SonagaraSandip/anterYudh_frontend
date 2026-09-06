@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { createPortal } from 'react-dom';
 import {
   LayoutDashboard,
   TrendingUp,
@@ -81,21 +82,101 @@ function App() {
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [sysStatus, setSysStatus] = useState({ database: 'Connecting...', isProd: false, environment: 'development' });
   
-  // App Master 8-Digit Security State (30009142)
+  // 30-Minute Security Session Duration (30 * 60 * 1000 ms)
+  const SESSION_DURATION_MS = 30 * 60 * 1000;
+
+  // App Master 8-Digit Security State with 30-Minute Session
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     try {
-      return sessionStorage.getItem('antaryudh_authenticated') === 'true';
+      const expiryStr = localStorage.getItem('antaryudh_auth_expiry');
+      if (expiryStr) {
+        const expiry = parseInt(expiryStr, 10);
+        if (!isNaN(expiry) && Date.now() < expiry) {
+          return true;
+        }
+      }
+      // If expired, cleanup stale session tokens
+      localStorage.removeItem('antaryudh_auth_expiry');
+      sessionStorage.removeItem('antaryudh_authenticated');
+      return false;
     } catch {
       return false;
     }
   });
+
+  const handleUnlock = () => {
+    const expiry = Date.now() + SESSION_DURATION_MS;
+    localStorage.setItem('antaryudh_auth_expiry', expiry.toString());
+    sessionStorage.setItem('antaryudh_authenticated', 'true');
+    setIsAuthenticated(true);
+  };
+
+  const handleLockApp = () => {
+    localStorage.removeItem('antaryudh_auth_expiry');
+    sessionStorage.removeItem('antaryudh_authenticated');
+    setIsAuthenticated(false);
+    setIsMobileMenuOpen(false);
+  };
+
+  // Monitor 30-minute session validity and auto-extend on user activity
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const checkExpiry = () => {
+      try {
+        const expiryStr = localStorage.getItem('antaryudh_auth_expiry');
+        if (!expiryStr || Date.now() >= parseInt(expiryStr, 10)) {
+          handleLockApp();
+        }
+      } catch {
+        handleLockApp();
+      }
+    };
+
+    // Periodic check every 10 seconds
+    const interval = setInterval(checkExpiry, 10000);
+
+    // Re-verify immediately on window visibility change
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkExpiry();
+      }
+    };
+
+    // Throttled activity refresh (extends session if user is actively working)
+    let lastActivity = Date.now();
+    const handleUserActivity = () => {
+      const now = Date.now();
+      if (now - lastActivity > 60000) {
+        lastActivity = now;
+        const currentExpiry = localStorage.getItem('antaryudh_auth_expiry');
+        if (currentExpiry && parseInt(currentExpiry, 10) > now) {
+          localStorage.setItem('antaryudh_auth_expiry', (now + SESSION_DURATION_MS).toString());
+        }
+      }
+    };
+
+    window.addEventListener('mousemove', handleUserActivity, { passive: true });
+    window.addEventListener('keydown', handleUserActivity, { passive: true });
+    window.addEventListener('touchstart', handleUserActivity, { passive: true });
+    window.addEventListener('scroll', handleUserActivity, { passive: true });
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('mousemove', handleUserActivity);
+      window.removeEventListener('keydown', handleUserActivity);
+      window.removeEventListener('touchstart', handleUserActivity);
+      window.removeEventListener('scroll', handleUserActivity);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isAuthenticated]);
 
   // Background Parallel Database Connection State
   const [connectionState, setConnectionState] = useState('connecting'); // 'connecting' | 'connected' | 'error'
 
   const checkDbConnection = async (isManualRetry = false) => {
     setConnectionState('connecting');
-    const startTime = Date.now();
     try {
       const res = await axios.get('/api/system/status');
       if (res.data && (res.data.status === 'online' || res.data.connected)) {
@@ -115,6 +196,24 @@ function App() {
   useEffect(() => {
     checkDbConnection();
   }, []);
+
+  // Lock background scroll when mobile sidebar drawer is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      const originalStyle = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Escape') setIsMobileMenuOpen(false);
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.body.style.overflow = originalStyle;
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [isMobileMenuOpen]);
 
   // Monitor window scroll position to toggle scroll-to-top button
   useEffect(() => {
@@ -242,10 +341,7 @@ function App() {
         <SecurityLockScreen
           connectionState={connectionState}
           sysStatus={sysStatus}
-          onUnlock={() => {
-            setIsAuthenticated(true);
-            sessionStorage.setItem('antaryudh_authenticated', 'true');
-          }}
+          onUnlock={handleUnlock}
           onRetryConnection={() => checkDbConnection(true)}
         />
       )}
@@ -324,10 +420,7 @@ function App() {
 
             {/* Master App Lock Button */}
             <button
-              onClick={() => {
-                setIsAuthenticated(false);
-                sessionStorage.removeItem('antaryudh_authenticated');
-              }}
+              onClick={handleLockApp}
               className="flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-rose-300 border border-slate-700/60 text-xs font-bold font-mono transition active:scale-95 shadow-sm cursor-pointer"
               title="Lock Wealth OS"
             >
@@ -338,88 +431,13 @@ function App() {
             {/* Mobile Hamburger Menu Toggle */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition"
+              className="md:hidden p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition cursor-pointer"
               aria-label="Toggle navigation menu"
             >
               {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
-
-        {/* Mobile Dropdown Menu */}
-        {isMobileMenuOpen && (
-          <div className="md:hidden bg-slate-900/95 backdrop-blur-xl border-b border-slate-800 px-3 py-3 animate-fadeIn">
-            <div className="grid grid-cols-1 gap-1.5">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id || (tab.id === 'notes' && activeTab === 'buy');
-
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleSelectTab(tab.id)}
-                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-between ${
-                      isActive
-                        ? `bg-gradient-to-r ${tab.activeGradient} text-white shadow-md ${tab.glow}`
-                        : 'text-slate-300 hover:bg-slate-800/80'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Icon className="w-4 h-4" />
-                      <span>{tab.label}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {tab.badge && (
-                        <span
-                          className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full border ${
-                            isActive
-                              ? 'bg-white/20 text-white border-white/30'
-                              : tab.badgeColor
-                          }`}
-                        >
-                          {tab.badge}
-                        </span>
-                      )}
-                      <ChevronRight className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-600'}`} />
-                    </div>
-                  </button>
-                );
-              })}
-
-              {/* Mobile Backup Button */}
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  setIsBackupModalOpen(true);
-                }}
-                className="w-full mt-1 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Cloud className="w-4 h-4 text-indigo-400" />
-                  <span>Database Backup & Cloud Sync</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-indigo-400" />
-              </button>
-
-              {/* Mobile Lock Button */}
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  setIsAuthenticated(false);
-                  sessionStorage.removeItem('antaryudh_authenticated');
-                }}
-                className="w-full px-3.5 py-2.5 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Lock className="w-4 h-4 text-rose-400" />
-                  <span>Lock Wealth OS</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-rose-400" />
-              </button>
-            </div>
-          </div>
-        )}
       </header>
 
       {/* Main Tab Content View Container (Lazy Loaded with Suspense for Maximum Speed) */}
@@ -444,6 +462,145 @@ function App() {
         isOpen={isBackupModalOpen}
         onClose={() => setIsBackupModalOpen(false)}
       />
+
+      {/* Mobile Slide-Out Side Navigation Drawer (Portaled to document.body for true full viewport overlay) */}
+      {isMobileMenuOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[999990] flex justify-end" style={{ margin: 0, padding: 0 }}>
+          {/* Backdrop overlay */}
+          <div
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-md animate-fadeIn z-[999991]"
+            aria-hidden="true"
+          />
+
+          {/* Slide-out Sidebar Drawer */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-[300px] sm:w-[340px] max-w-[88vw] h-[100dvh] bg-slate-900 border-l border-slate-800 shadow-2xl z-[999999] flex flex-col animate-slideInRight overflow-hidden"
+          >
+            {/* Drawer Top Header */}
+            <div className="p-4 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-500 text-white shadow-md shadow-indigo-500/20">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-sm text-white font-mono">AntarYudh</span>
+                    <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-bold uppercase">
+                      OS
+                    </span>
+                  </div>
+                  <span className="text-[9px] text-slate-400">Navigation Menu</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                aria-label="Close menu"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Navigation Tab List */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5 no-scrollbar">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 px-2 py-1">
+                Wealth OS Modules
+              </div>
+
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id || (tab.id === 'notes' && activeTab === 'buy');
+
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleSelectTab(tab.id)}
+                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-between cursor-pointer ${
+                      isActive
+                        ? `bg-gradient-to-r ${tab.activeGradient} text-white shadow-md ${tab.glow}`
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Icon className="w-4 h-4" />
+                      <span>{tab.label}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {tab.badge && (
+                        <span
+                          className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full border ${
+                            isActive
+                              ? 'bg-white/20 text-white border-white/30'
+                              : tab.badgeColor
+                          }`}
+                        >
+                          {tab.badge}
+                        </span>
+                      )}
+                      <ChevronRight className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-600'}`} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Drawer Pinned Bottom Section: DB Live Status, Backup & Screen Lock */}
+            <div className="p-3.5 border-t border-slate-800 bg-slate-950 space-y-2 mt-auto shrink-0">
+              {/* Live Database Sync Status Bar */}
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[10px] font-mono">
+                <div className="flex items-center gap-1.5 text-slate-400">
+                  <Database className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <span>Database:</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="relative flex h-2 w-2">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${sysStatus.isProd ? 'bg-emerald-400' : 'bg-cyan-400'}`} />
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${sysStatus.isProd ? 'bg-emerald-500' : 'bg-cyan-500'}`} />
+                  </span>
+                  <span className={`font-bold ${sysStatus.isProd ? 'text-emerald-400' : 'text-amber-300'}`}>
+                    {sysStatus.database}
+                  </span>
+                </div>
+              </div>
+
+              {/* Mobile Database Backup Button */}
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsBackupModalOpen(true);
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl text-xs font-bold bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 flex items-center justify-between transition active:scale-95 cursor-pointer shadow-sm"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Cloud className="w-4 h-4 text-indigo-400" />
+                  <span>Database Backup & Cloud Sync</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-indigo-400" />
+              </button>
+
+              {/* Mobile Screen Lock Button */}
+              <button
+                onClick={handleLockApp}
+                className="w-full px-3.5 py-2.5 rounded-xl text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 flex items-center justify-between transition active:scale-95 cursor-pointer shadow-sm"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Lock className="w-4 h-4 text-rose-400" />
+                  <span>Lock Wealth OS</span>
+                </div>
+                <div className="flex items-center gap-1 text-[9px] font-mono text-rose-400/80">
+                  <span>30m</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-rose-400" />
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Modern Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 sm:px-6 text-center text-xs text-slate-500">
