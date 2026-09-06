@@ -185,6 +185,40 @@ export default function BackupModal({ isOpen, onClose }) {
             </div>
           )}
 
+          {/* Last Backup Highlight Banner */}
+          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                <Clock className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
+                  Last Backup Taken
+                </div>
+                <div className="text-sm font-bold text-white font-mono truncate">
+                  {status?.lastBackupTime ? (
+                    new Date(status.lastBackupTime).toLocaleString([], {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    })
+                  ) : (
+                    <span className="text-slate-500 font-normal">No backup recorded yet</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {status?.lastBackupTime && (
+              <span className="text-[10px] px-2.5 py-1 rounded-full font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                {status?.lastBackupSource || 'Active'}
+              </span>
+            )}
+          </div>
+
           {/* Configuration & Cron Overview Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Auto Schedule Card */}
@@ -221,7 +255,7 @@ export default function BackupModal({ isOpen, onClose }) {
                 {status?.hasFolderId ? 'Folder Linked' : 'Folder ID Needed'}
               </div>
               <div className="text-[11px] text-slate-500 truncate">
-                {status?.hasKeyPath ? 'Key JSON detected' : 'Service account ready'}
+                {status?.hasOAuth ? 'OAuth Active' : (status?.hasInlineKey || status?.hasKeyPath ? 'Service Account Active' : 'Credentials Needed')}
               </div>
             </div>
           </div>
@@ -257,12 +291,12 @@ export default function BackupModal({ isOpen, onClose }) {
             </button>
           </div>
 
-          {/* Recent Archives List */}
+          {/* Recent Archives List (Local + Drive + DB Logs) */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
                 <FileArchive className="w-3.5 h-3.5 text-indigo-400" />
-                Recent Backup Archives ({backups.localBackups?.length || 0})
+                Backup Archives History
               </h4>
               <button
                 onClick={fetchBackupData}
@@ -274,9 +308,67 @@ export default function BackupModal({ isOpen, onClose }) {
               </button>
             </div>
 
-            <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800/80 bg-slate-950/40 max-h-48 overflow-y-auto">
-              {backups.localBackups && backups.localBackups.length > 0 ? (
-                backups.localBackups.map((b, idx) => (
+            <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800/80 bg-slate-950/40 max-h-56 overflow-y-auto">
+              {(() => {
+                // Combine and deduplicate drive backups, local backups, and db logs
+                const items = [];
+                const seen = new Set();
+
+                // 1. Google Drive backups
+                (backups.driveBackups || []).forEach((b) => {
+                  if (b.name && !seen.has(b.name)) {
+                    seen.add(b.name);
+                    items.push({
+                      name: b.name,
+                      sizeKB: b.size ? (b.size / 1024).toFixed(2) : null,
+                      createdAt: b.createdTime || b.modifiedTime,
+                      source: 'Google Drive',
+                      link: b.webViewLink,
+                      badgeClass: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
+                    });
+                  }
+                });
+
+                // 2. DB logged backups
+                (backups.dbBackups || []).forEach((b) => {
+                  if (b.name && !seen.has(b.name)) {
+                    seen.add(b.name);
+                    items.push({
+                      name: b.name,
+                      sizeKB: b.sizeKB || (b.sizeBytes ? (b.sizeBytes / 1024).toFixed(2) : null),
+                      createdAt: b.createdAt,
+                      source: b.driveFileId ? 'Drive Synced' : 'Database Log',
+                      badgeClass: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30'
+                    });
+                  }
+                });
+
+                // 3. Local disk backups
+                (backups.localBackups || []).forEach((b) => {
+                  if (b.name && !seen.has(b.name)) {
+                    seen.add(b.name);
+                    items.push({
+                      name: b.name,
+                      sizeKB: b.sizeKB,
+                      createdAt: b.createdAt,
+                      source: 'Local Disk',
+                      badgeClass: 'bg-slate-800 text-slate-300 border-slate-700'
+                    });
+                  }
+                });
+
+                // Sort by createdAt descending
+                items.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+                if (items.length === 0) {
+                  return (
+                    <div className="p-6 text-center text-xs text-slate-500">
+                      No backup archives found yet. Click "Backup Database Now" above to create your first archive.
+                    </div>
+                  );
+                }
+
+                return items.map((b, idx) => (
                   <div key={b.name || idx} className="p-2.5 sm:p-3 flex items-center justify-between gap-2 hover:bg-slate-800/30 transition text-xs">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
@@ -287,23 +379,36 @@ export default function BackupModal({ isOpen, onClose }) {
                           {b.name}
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center gap-2">
-                          <span>{new Date(b.createdAt).toLocaleString()}</span>
-                          <span>•</span>
-                          <span className="text-cyan-400 font-mono">{b.sizeKB} KB</span>
+                          <span>{b.createdAt ? new Date(b.createdAt).toLocaleString() : 'Recent'}</span>
+                          {b.sizeKB && (
+                            <>
+                              <span>•</span>
+                              <span className="text-cyan-400 font-mono">{b.sizeKB} KB</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-mono shrink-0">
-                      Verified
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-mono border ${b.badgeClass}`}>
+                        {b.source}
+                      </span>
+                      {b.link && (
+                        <a
+                          href={b.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1 rounded hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 transition"
+                          title="Open in Google Drive"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
                   </div>
-                ))
-              ) : (
-                <div className="p-6 text-center text-xs text-slate-500">
-                  No backup archives found yet. Click "Backup Database Now" above to create your first archive.
-                </div>
-              )}
+                ));
+              })()}
             </div>
           </div>
         </div>

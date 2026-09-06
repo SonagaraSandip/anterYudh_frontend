@@ -15,12 +15,13 @@ import {
   Zap,
   FileText,
   Lock,
-  Loader2
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 import axios from 'axios';
 import { Cloud } from 'lucide-react';
 import MainDashboard from './components/MainDashboard';
-import ConnectingScreen from './components/ConnectingScreen';
+import SecurityLockScreen from './components/SecurityLockScreen';
 import BackupModal from './components/BackupModal';
 
 // Lazy load heavyweight tab components so only Dashboard is loaded on initial render
@@ -28,6 +29,7 @@ const IpoDashboard = lazy(() => import('./components/IpoDashboard'));
 const TradingView = lazy(() => import('./components/TradingView'));
 const ExpensesView = lazy(() => import('./components/ExpensesView'));
 const NotesView = lazy(() => import('./components/NotesView'));
+const GrowthView = lazy(() => import('./components/GrowthView'));
 
 // Modern Sleek Fallback for lazy-loaded tabs
 function TabLoadingFallback() {
@@ -55,14 +57,18 @@ function App() {
   const getInitialTab = () => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '').toLowerCase();
-      if (['dashboard', 'ipo', 'trading', 'expenses', 'notes', 'buy'].includes(hash)) {
-        return hash === 'buy' ? 'notes' : hash;
+      if (['dashboard', 'ipo', 'trading', 'expenses', 'notes', 'buy', 'growth', 'skills', 'books'].includes(hash)) {
+        if (hash === 'buy') return 'notes';
+        if (hash === 'skills' || hash === 'books') return 'growth';
+        return hash;
       }
       if (hash === 'goal') return 'trading';
 
       const saved = localStorage.getItem('antaryudh_active_tab');
-      if (['dashboard', 'ipo', 'trading', 'expenses', 'notes', 'buy'].includes(saved)) {
-        return saved === 'buy' ? 'notes' : saved;
+      if (['dashboard', 'ipo', 'trading', 'expenses', 'notes', 'buy', 'growth', 'skills', 'books'].includes(saved)) {
+        if (saved === 'buy') return 'notes';
+        if (saved === 'skills' || saved === 'books') return 'growth';
+        return saved;
       }
       if (saved === 'goal') return 'trading';
     }
@@ -75,14 +81,16 @@ function App() {
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [sysStatus, setSysStatus] = useState({ database: 'Connecting...', isProd: false, environment: 'development' });
   
-  // Database Connecting Screen State (Skip on session refresh for instantaneous loading)
-  const [isConnectingDb, setIsConnectingDb] = useState(() => {
+  // App Master 8-Digit Security State (30009142)
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
     try {
-      return !sessionStorage.getItem('antaryudh_connected');
+      return sessionStorage.getItem('antaryudh_authenticated') === 'true';
     } catch {
-      return true;
+      return false;
     }
   });
+
+  // Background Parallel Database Connection State
   const [connectionState, setConnectionState] = useState('connecting'); // 'connecting' | 'connected' | 'error'
 
   const checkDbConnection = async (isManualRetry = false) => {
@@ -93,30 +101,17 @@ function App() {
       if (res.data && (res.data.status === 'online' || res.data.connected)) {
         setSysStatus(res.data);
         sessionStorage.setItem('antaryudh_connected', 'true');
-        
-        // Fast transition: non-blocking delay so user gets into dashboard in < 300ms!
-        const elapsed = Date.now() - startTime;
-        const remainingDelay = isManualRetry ? Math.max(0, 300 - elapsed) : Math.max(0, 150 - elapsed);
-        
-        setTimeout(() => {
-          setConnectionState('connected');
-          setTimeout(() => {
-            setIsConnectingDb(false);
-          }, 100);
-        }, remainingDelay);
+        setConnectionState('connected');
       } else {
         throw new Error('Database not ready');
       }
     } catch (err) {
       console.warn('System status not reachable or DB error:', err);
-      const elapsed = Date.now() - startTime;
-      const remainingDelay = Math.max(0, 400 - elapsed);
-      setTimeout(() => {
-        setConnectionState('error');
-      }, remainingDelay);
+      setConnectionState('error');
     }
   };
 
+  // Run DB connection check immediately in parallel while user enters password
   useEffect(() => {
     checkDbConnection();
   }, []);
@@ -134,6 +129,21 @@ function App() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Listen to browser hash navigation (back/forward buttons)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '').toLowerCase();
+      if (['dashboard', 'ipo', 'trading', 'expenses', 'notes', 'buy', 'growth', 'skills', 'books'].includes(hash)) {
+        if (hash === 'buy') setActiveTab('notes');
+        else if (hash === 'skills' || hash === 'books') setActiveTab('growth');
+        else setActiveTab(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
 
   const scrollToTop = () => {
     window.scrollTo({
@@ -201,6 +211,18 @@ function App() {
       activeText: 'text-indigo-400',
       activeBorder: 'border-indigo-500/40',
       glow: 'shadow-indigo-500/20'
+    },
+    {
+      id: 'growth',
+      label: 'Skills & Books',
+      icon: Sparkles,
+      badge: 'New',
+      badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      color: 'amber',
+      activeGradient: 'from-amber-600 via-orange-500 to-rose-500',
+      activeText: 'text-amber-400',
+      activeBorder: 'border-amber-500/40',
+      glow: 'shadow-amber-500/20'
     }
   ];
 
@@ -215,13 +237,16 @@ function App() {
 
   return (
     <>
-      {/* 0. Fullscreen Database Connecting Screen (Instant on session return) */}
-      {isConnectingDb && (
-        <ConnectingScreen
+      {/* 0. Fullscreen Master Passcode Screen with Live Background DB Connection Handshake */}
+      {!isAuthenticated && (
+        <SecurityLockScreen
           connectionState={connectionState}
           sysStatus={sysStatus}
-          onRetry={() => checkDbConnection(true)}
-          onBypass={() => setIsConnectingDb(false)}
+          onUnlock={() => {
+            setIsAuthenticated(true);
+            sessionStorage.setItem('antaryudh_authenticated', 'true');
+          }}
+          onRetryConnection={() => checkDbConnection(true)}
         />
       )}
 
@@ -268,23 +293,12 @@ function App() {
                 >
                   <Icon className="w-3.5 h-3.5" />
                   <span>{tab.label}</span>
-                  {tab.badge && (
-                    <span
-                      className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full border ${
-                        isActive
-                          ? 'bg-white/20 text-white border-white/30'
-                          : tab.badgeColor
-                      }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  )}
                 </button>
               );
             })}
           </nav>
 
-          {/* Right Header Status Bar & Mobile Menu Button */}
+          {/* Right Header Status Bar & Quick Actions */}
           <div className="flex items-center gap-2">
             {/* Live Database Sync Indicator */}
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] font-mono shadow-sm">
@@ -306,6 +320,19 @@ function App() {
             >
               <Cloud className="w-3.5 h-3.5 text-indigo-400" />
               <span>Backup</span>
+            </button>
+
+            {/* Master App Lock Button */}
+            <button
+              onClick={() => {
+                setIsAuthenticated(false);
+                sessionStorage.removeItem('antaryudh_authenticated');
+              }}
+              className="flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-rose-300 border border-slate-700/60 text-xs font-bold font-mono transition active:scale-95 shadow-sm cursor-pointer"
+              title="Lock Wealth OS"
+            >
+              <Lock className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">Lock</span>
             </button>
 
             {/* Mobile Hamburger Menu Toggle */}
@@ -374,6 +401,22 @@ function App() {
                 </div>
                 <ChevronRight className="w-4 h-4 text-indigo-400" />
               </button>
+
+              {/* Mobile Lock Button */}
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsAuthenticated(false);
+                  sessionStorage.removeItem('antaryudh_authenticated');
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl text-xs font-bold bg-rose-500/15 border border-rose-500/30 text-rose-300 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Lock className="w-4 h-4 text-rose-400" />
+                  <span>Lock Wealth OS</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-rose-400" />
+              </button>
             </div>
           </div>
         )}
@@ -392,6 +435,7 @@ function App() {
           {activeTab === 'trading' && <TradingView />}
           {activeTab === 'expenses' && <ExpensesView />}
           {(activeTab === 'notes' || activeTab === 'buy') && <NotesView />}
+          {activeTab === 'growth' && <GrowthView />}
         </Suspense>
       </main>
 

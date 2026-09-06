@@ -14,6 +14,9 @@ export const NoteCard = React.memo(function NoteCard({
   onDelete,
   formatDate
 }) {
+  const isSecret = Boolean(note.isSecret);
+  const isPinned = Boolean(note.isPinned);
+
   const bgClass = colorConfig.bg || 'bg-slate-900/95';
   const borderClass = colorConfig.border || 'border-slate-800 hover:border-slate-700';
   const dividerClass = colorConfig.divider || 'border-white/10';
@@ -25,7 +28,7 @@ export const NoteCard = React.memo(function NoteCard({
         'rounded-xl sm:rounded-2xl border p-3 sm:p-4 shadow-xl transition-all duration-200 relative flex flex-col justify-between group overflow-hidden min-h-[120px] sm:min-h-[140px]',
         bgClass,
         borderClass,
-        note.isPinned && 'ring-1 ring-amber-400/40 shadow-amber-500/5'
+        isPinned && 'ring-1 ring-amber-400/40 shadow-amber-500/5'
       )}
     >
       {/* Top Header Bar */}
@@ -39,14 +42,14 @@ export const NoteCard = React.memo(function NoteCard({
               onClick={() => onTogglePin(note)}
               className={clsx(
                 'p-1 -ml-1 rounded-md transition hover:bg-white/10 shrink-0 select-none active:scale-90 touch-manipulation',
-                note.isPinned ? 'text-amber-400' : 'text-slate-400/70 hover:text-white'
+                isPinned ? 'text-amber-400' : 'text-slate-400/70 hover:text-white'
               )}
-              title={note.isPinned ? 'Unpin Note' : 'Pin Note'}
+              title={isPinned ? 'Unpin Note' : 'Pin Note'}
             >
               <Pin
                 className={clsx(
                   'w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform',
-                  note.isPinned ? 'fill-amber-400 rotate-0' : '-rotate-45'
+                  isPinned ? 'fill-amber-400 rotate-0' : '-rotate-45'
                 )}
               />
             </button>
@@ -63,7 +66,7 @@ export const NoteCard = React.memo(function NoteCard({
                   {note.category}
                 </span>
               )}
-              {note.isSecret ? (
+              {isSecret ? (
                 <span className="text-[8px] sm:text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono flex items-center gap-0.5">
                   <Lock className="w-2.5 h-2.5 text-rose-400" />
                   <span>Secret</span>
@@ -80,12 +83,12 @@ export const NoteCard = React.memo(function NoteCard({
               onClick={() => onCopy(note)}
               className={clsx(
                 'p-1 sm:p-1.5 rounded transition active:scale-90 touch-manipulation',
-                note.isSecret && !isRevealed
+                isSecret && !isRevealed
                   ? 'text-slate-400 hover:text-amber-300 hover:bg-amber-500/10'
                   : 'text-slate-300 hover:text-white hover:bg-white/10'
               )}
               title={
-                note.isSecret && !isRevealed
+                isSecret && !isRevealed
                   ? 'Protected: Enter PIN to copy'
                   : isCopied
                   ? 'Copied!'
@@ -94,7 +97,7 @@ export const NoteCard = React.memo(function NoteCard({
             >
               {isCopied ? (
                 <Check className="w-3.5 h-3.5 text-emerald-400 animate-scaleIn" />
-              ) : note.isSecret && !isRevealed ? (
+              ) : isSecret && !isRevealed ? (
                 <Lock className="w-3.5 h-3.5 text-amber-400/90" />
               ) : (
                 <Copy className="w-3.5 h-3.5" />
@@ -106,7 +109,7 @@ export const NoteCard = React.memo(function NoteCard({
               type="button"
               onClick={() => onEdit(note)}
               className="p-1 sm:p-1.5 rounded text-slate-300 hover:text-white hover:bg-white/10 transition active:scale-90 touch-manipulation"
-              title={note.isSecret && !isRevealed ? 'Protected: Enter PIN to edit' : 'Edit Note'}
+              title={isSecret && !isRevealed ? 'Protected: Enter PIN to edit' : 'Edit Note'}
             >
               <Edit3 className="w-3.5 h-3.5" />
             </button>
@@ -129,7 +132,7 @@ export const NoteCard = React.memo(function NoteCard({
 
       {/* Note Body Content - Fills available card space with NO wasted boxes */}
       <div className="flex-1 flex flex-col justify-start">
-        {note.isSecret && !isRevealed ? (
+        {isSecret && !isRevealed ? (
           <div className="flex items-center justify-between text-slate-400 py-1.5 px-2 bg-black/20 rounded-lg">
             <span className="tracking-widest font-black text-slate-300 text-xs truncate select-none">
               ••••••••••••••••••••
@@ -148,7 +151,7 @@ export const NoteCard = React.memo(function NoteCard({
             <div className="text-xs sm:text-[13px] text-slate-200/90 whitespace-pre-wrap font-sans leading-relaxed break-words select-text max-h-48 sm:max-h-56 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10">
               {note.content || <span className="italic text-slate-400/60 font-serif text-[11px] sm:text-xs">Jot down your thoughts here...</span>}
             </div>
-            {note.isSecret && isRevealed && (
+            {Boolean(isSecret && isRevealed) && (
               <div className="flex justify-end pt-1">
                 <button
                   type="button"

@@ -29,7 +29,8 @@ import {
   FileSpreadsheet,
   AlertCircle,
   Cloud,
-  Database
+  Database,
+  BookOpen
 } from 'lucide-react';
 
 export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
@@ -445,7 +446,7 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
             </div>
           </div>
 
-          {/* Quick Action Navigation Buttons (Responsive 2x2 Grid on Mobile) */}
+          {/* Quick Action Navigation Buttons (Responsive Grid on Mobile) */}
           <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0 w-full md:w-auto">
             <button
               onClick={() => onNavigateTab('trading')}
@@ -474,6 +475,13 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
             >
               <FileText className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Notes</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('growth')}
+              className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-500 hover:to-rose-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-amber-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate cursor-pointer col-span-2 sm:col-span-1"
+            >
+              <BookOpen className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Skills & Books</span>
             </button>
           </div>
         </div>
