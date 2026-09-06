@@ -136,6 +136,25 @@ export const cacheManager = {
   },
 
   /**
+   * Clear all cache entries
+   */
+  clear() {
+    MEMORY_CACHE.clear();
+    if (typeof window !== 'undefined') {
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('ay_cache_')) {
+            localStorage.removeItem(key);
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    }
+  },
+
+  /**
    * Session Storage Helpers
    */
   session: {

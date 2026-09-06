@@ -17,7 +17,9 @@ import {
   FileText,
   Lock,
   Loader2,
-  Sparkles
+  Sparkles,
+  Download,
+  Smartphone
 } from 'lucide-react';
 import axios from 'axios';
 import { Cloud } from 'lucide-react';
@@ -81,6 +83,46 @@ function App() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [sysStatus, setSysStatus] = useState({ database: 'Connecting...', isProd: false, environment: 'development' });
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+
+  // Listen for PWA Install Prompt
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredInstallPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredInstallPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    if (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches) {
+      setIsAppInstalled(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredInstallPrompt) {
+      alert('To install on your phone:\n- Android Chrome: Tap menu (⋮) ➔ "Install app"\n- iOS Safari: Tap Share (⎋) ➔ "Add to Home Screen"');
+      return;
+    }
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsAppInstalled(true);
+    }
+    setDeferredInstallPrompt(null);
+  };
   
   // 30-Minute Security Session Duration (30 * 60 * 1000 ms)
   const SESSION_DURATION_MS = 30 * 60 * 1000;
@@ -566,6 +608,22 @@ function App() {
                   </span>
                 </div>
               </div>
+
+              {/* PWA Install App Button (When available or on mobile) */}
+              {!isAppInstalled && (
+                <button
+                  onClick={handleInstallApp}
+                  className="w-full px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600/25 to-blue-600/25 hover:from-cyan-600/35 hover:to-blue-600/35 border border-cyan-500/40 text-cyan-300 flex items-center justify-between transition active:scale-95 cursor-pointer shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Download className="w-4 h-4 text-cyan-400 animate-bounce" />
+                    <span>Install AntarYudh App</span>
+                  </div>
+                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold">
+                    PWA
+                  </span>
+                </button>
+              )}
 
               {/* Mobile Database Backup Button */}
               <button
