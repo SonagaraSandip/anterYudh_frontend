@@ -35,7 +35,9 @@ export const IpoMobileCard = React.memo(function IpoMobileCard({
 }) {
   const ipoMetrics = calculateIpoMetrics(ipo);
   const pl = ipoMetrics.profitLoss;
-  const lc = parseFloat(ipo.lotCost) || 0;
+  const lc = ipoMetrics.effectiveLotCost || parseFloat(ipo.lotCost) || 0;
+  const lotSize = ipoMetrics.effectiveLotSize || parseInt(ipo.lotSize, 10) || 0;
+  const issuePrice = ipoMetrics.effectiveIssuePrice || parseFloat(ipo.issuePrice) || 0;
   const isPositive = pl > 0;
   const isNegative = pl < 0;
   const ipoPercent = ipoMetrics.percentage !== null ? ipoMetrics.percentage : calculateIpoPercentage(ipo);
@@ -143,9 +145,17 @@ export const IpoMobileCard = React.memo(function IpoMobileCard({
                 type="button"
                 onClick={() => onStartEditLotCost(ipo)}
                 className="px-2.5 py-0.5 rounded-md bg-[#1e1b4b]/60 text-indigo-300 border border-indigo-500/30 hover:border-indigo-500/60 font-mono text-[11px] font-medium transition flex items-center gap-1 active:scale-95"
-                title="Click to edit lot cost"
+                title={
+                  lotSize > 0 && lc > 0
+                    ? `Lot Cost: ${formatCurrency(lc)} (${lotSize} shares${issuePrice > 0 ? ` @ ₹${issuePrice}` : ''})`
+                    : 'Click to edit lot cost'
+                }
               >
-                <span>Lot: {lc > 0 ? formatCurrency(lc) : 'Set Cost'}</span>
+                <span>
+                  {lc > 0
+                    ? `Lot: ${formatCurrency(lc)}${lotSize > 0 ? ` (${lotSize} sh)` : ''}`
+                    : 'Lot: Set Cost'}
+                </span>
                 <Edit2 className="w-2.5 h-2.5 opacity-60" />
               </button>
             )}

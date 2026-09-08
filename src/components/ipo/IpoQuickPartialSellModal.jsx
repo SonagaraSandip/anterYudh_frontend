@@ -134,7 +134,7 @@ export function IpoQuickPartialSellModal({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 scrollbar-thin scrollbar-thumb-slate-700">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Sell Date */}
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-slate-400 mb-1">
                 Sell Date
               </label>
@@ -148,7 +148,7 @@ export function IpoQuickPartialSellModal({
             </div>
 
             {/* Sell Quantity */}
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-medium text-slate-400">
                   Sell Quantity <span className="text-rose-400">*</span>
@@ -177,7 +177,7 @@ export function IpoQuickPartialSellModal({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Sell Price */}
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-slate-400 mb-1">
                 Selling Price per Share (₹) <span className="text-rose-400">*</span>
               </label>
@@ -195,7 +195,7 @@ export function IpoQuickPartialSellModal({
             </div>
 
             {/* Delivery Charges */}
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-medium text-slate-400">
                   Statutory Charges (₹)

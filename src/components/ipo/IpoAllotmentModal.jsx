@@ -12,7 +12,8 @@ import {
   Calendar,
   CheckCircle2,
   Split,
-  Calculator
+  Calculator,
+  ArrowRight
 } from 'lucide-react';
 import clsx from 'clsx';
 import { calculateIpoCharges, calculateApplicationMetrics } from '../../utils/ipoCalculator';
@@ -29,26 +30,31 @@ export function IpoAllotmentModal({
 
   const lotCost = parseFloat(ipo.lotCost) || 0;
   const initialApp = application || {};
-  const metrics = calculateApplicationMetrics(initialApp, ipo);
 
   // Mode: 'simple' (Single full/standard exit) | 'multileg' (Multiple partial sell tranches)
-  const hasMultipleLegs = Array.isArray(initialApp.transactions) && initialApp.transactions.length > 1;
-  const [mode, setMode] = useState(hasMultipleLegs ? 'multileg' : 'simple');
+  const existingSellLegs = Array.isArray(initialApp.transactions)
+    ? initialApp.transactions.filter((t) => t.type === 'SELL')
+    : [];
+  const hasMultipleSells = existingSellLegs.length > 1;
+  const [mode, setMode] = useState(hasMultipleSells ? 'multileg' : 'simple');
 
   // Allotment inputs
   const [allottedShares, setAllottedShares] = useState(() => {
     if (initialApp.allottedShares > 0) return String(initialApp.allottedShares);
-    if (lotCost > 0 && initialApp.allottedPrice > 0) return String(Math.round(lotCost / initialApp.allottedPrice));
-    return '1';
+    return '';
   });
 
   const [allottedPrice, setAllottedPrice] = useState(() => {
     if (initialApp.allottedPrice > 0) return String(initialApp.allottedPrice);
-    if (lotCost > 0 && parseInt(allottedShares, 10) > 0) return String(Math.round((lotCost / parseInt(allottedShares, 10)) * 100) / 100);
-    return lotCost > 0 ? String(lotCost) : '';
+    return '';
   });
 
-  const [allotmentCharges, setAllotmentCharges] = useState('0');
+  const [totalLotCostInput, setTotalLotCostInput] = useState(() => {
+    if (initialApp.allottedShares > 0 && initialApp.allottedPrice > 0) {
+      return String(initialApp.allottedShares * initialApp.allottedPrice);
+    }
+    return lotCost > 0 ? String(lotCost) : '';
+  });
 
   // Simple Exit Mode inputs
   const [isExited, setIsExited] = useState(() => {
@@ -67,40 +73,55 @@ export function IpoAllotmentModal({
     if (initialApp.charges !== undefined && initialApp.charges !== null && initialApp.charges > 0) {
       return String(initialApp.charges);
     }
-    const q = parseInt(allottedShares, 10) || 1;
-    const sp = parseFloat(sellPrice) || 0;
-    return sp > 0 ? String(calculateIpoCharges(q, sp, false)) : '20';
+    return '0';
   });
 
   const [notes, setNotes] = useState(() => initialApp.notes || '');
 
-  // Multi-Leg Partial Sells
-  const [legs, setLegs] = useState(() => {
-    if (Array.isArray(initialApp.transactions) && initialApp.transactions.length > 0) {
-      return initialApp.transactions.map((l) => ({
-        id: l.id || `leg-${Math.random()}`,
-        type: l.type || 'SELL',
+  // Partial Sells List (ONLY SELL LEGS - No duplicate Allotment leg!)
+  const [sellLegs, setSellLegs] = useState(() => {
+    if (existingSellLegs.length > 0) {
+      return existingSellLegs.map((l) => ({
+        id: l.id || `leg-sell-${Math.random()}`,
         date: l.date ? l.date.slice(0, 10) : new Date().toISOString().split('T')[0],
-        price: String(l.price ?? ''),
-        quantity: String(l.quantity ?? '1'),
-        charges: String(l.charges ?? '0'),
+        price: l.price !== undefined && l.price !== null ? String(l.price) : '',
+        quantity: l.quantity !== undefined && l.quantity !== null ? String(l.quantity) : '1',
+        charges: l.charges !== undefined && l.charges !== null ? String(l.charges) : '0',
         notes: l.notes || ''
       }));
     }
-    return [
-      {
-        id: `leg-buy-${Date.now()}`,
-        type: 'BUY',
-        date: ipo.createdAt ? String(ipo.createdAt).slice(0, 10) : new Date().toISOString().split('T')[0],
-        price: allottedPrice,
-        quantity: allottedShares,
-        charges: '0',
-        notes: 'IPO Allotment'
-      }
-    ];
+    return [];
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sync Total Cost when Shares or Allotted Price change
+  const handleSharesChange = (val) => {
+    setAllottedShares(val);
+    const sharesNum = parseFloat(val) || 0;
+    const priceNum = parseFloat(allottedPrice) || 0;
+    if (sharesNum > 0 && priceNum > 0) {
+      setTotalLotCostInput(String(Math.round(sharesNum * priceNum * 100) / 100));
+    }
+  };
+
+  const handlePriceChange = (val) => {
+    setAllottedPrice(val);
+    const priceNum = parseFloat(val) || 0;
+    const sharesNum = parseFloat(allottedShares) || 0;
+    if (sharesNum > 0 && priceNum > 0) {
+      setTotalLotCostInput(String(Math.round(sharesNum * priceNum * 100) / 100));
+    }
+  };
+
+  const handleTotalCostChange = (val) => {
+    setTotalLotCostInput(val);
+    const totalNum = parseFloat(val) || 0;
+    const sharesNum = parseFloat(allottedShares) || 0;
+    if (totalNum > 0 && sharesNum > 0) {
+      setAllottedPrice(String(Math.round((totalNum / sharesNum) * 100) / 100));
+    }
+  };
 
   // Auto-calculate charges for simple exit when shares or sell price change
   useEffect(() => {
@@ -114,31 +135,33 @@ export function IpoAllotmentModal({
     }
   }, [allottedShares, sellPrice, isExited, mode]);
 
-  // Total Allotment Cost Calculation
-  const totalAllotmentCost = (parseInt(allottedShares, 10) || 0) * (parseFloat(allottedPrice) || 0);
+  // Derived Values
+  const sharesNum = parseInt(allottedShares, 10) || 0;
+  const priceNum = parseFloat(allottedPrice) || 0;
+  const computedTotalCost = sharesNum > 0 && priceNum > 0 ? (sharesNum * priceNum) : (parseFloat(totalLotCostInput) || 0);
 
-  // Real-time Preview in Simple Mode
-  const simpleSellQty = parseInt(allottedShares, 10) || 0;
+  // Simple Mode Calculations
+  const simpleSellQty = sharesNum > 0 ? sharesNum : 0;
   const simpleSellPrc = parseFloat(sellPrice) || 0;
   const simpleSellRevenue = simpleSellQty * simpleSellPrc;
   const simpleChargesNum = parseFloat(simpleCharges) || 0;
-  const simpleNetPnl = isExited && simpleSellPrc > 0 ? (simpleSellRevenue - totalAllotmentCost - simpleChargesNum) : null;
-  const simplePnlPercent = simpleNetPnl !== null && totalAllotmentCost > 0 ? (simpleNetPnl / totalAllotmentCost) * 100 : 0;
+  const simpleNetPnl = isExited && simpleSellPrc > 0 && computedTotalCost > 0
+    ? (simpleSellRevenue - computedTotalCost - simpleChargesNum)
+    : null;
+  const simplePnlPercent = simpleNetPnl !== null && computedTotalCost > 0 ? (simpleNetPnl / computedTotalCost) * 100 : 0;
 
-  // Real-time Multi-Leg Calculations
-  const multiBuyLegs = legs.filter((l) => l.type === 'BUY');
-  const multiSellLegs = legs.filter((l) => l.type === 'SELL');
-  const multiTotalBuyQty = multiBuyLegs.reduce((acc, l) => acc + (parseInt(l.quantity, 10) || 0), 0);
-  const multiTotalSellQty = multiSellLegs.reduce((acc, l) => acc + (parseInt(l.quantity, 10) || 0), 0);
-  const multiRemainingQty = Math.max(0, multiTotalBuyQty - multiTotalSellQty);
-  const multiSellRevenue = multiSellLegs.reduce(
+  // Multi-Leg Calculations
+  const totalSoldShares = sellLegs.reduce((acc, l) => acc + (parseInt(l.quantity, 10) || 0), 0);
+  const remainingShares = Math.max(0, (sharesNum || 0) - totalSoldShares);
+  const multiSellRevenue = sellLegs.reduce(
     (acc, l) => acc + (parseFloat(l.price) || 0) * (parseInt(l.quantity, 10) || 0),
     0
   );
-  const multiTotalCharges = legs.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
-  const avgMultiBuyPrice = parseFloat(allottedPrice) || 0;
-  const multiSoldCostBasis = multiTotalSellQty * avgMultiBuyPrice;
-  const multiNetPnl = multiSellLegs.length > 0 ? (multiSellRevenue - multiSoldCostBasis - multiTotalCharges) : null;
+  const multiTotalCharges = sellLegs.reduce((acc, l) => acc + (parseFloat(l.charges) || 0), 0);
+  const multiSoldCostBasis = totalSoldShares * priceNum;
+  const multiNetPnl = totalSoldShares > 0 && priceNum > 0
+    ? (multiSellRevenue - multiSoldCostBasis - multiTotalCharges)
+    : null;
   const multiPnlPercent = multiNetPnl !== null && multiSoldCostBasis > 0 ? (multiNetPnl / multiSoldCostBasis) * 100 : 0;
 
   // Currency helper
@@ -153,39 +176,35 @@ export function IpoAllotmentModal({
 
   // Add partial sell leg
   const handleAddSellLeg = () => {
-    const defaultQty = multiRemainingQty > 0 ? String(multiRemainingQty) : '1';
-    const defaultPrice = sellPrice || allottedPrice || '0';
-    const autoChg = calculateIpoCharges(parseInt(defaultQty, 10) || 1, parseFloat(defaultPrice) || 0, false);
-
-    setLegs((prev) => [
+    const defaultQty = remainingShares > 0 ? String(remainingShares) : '1';
+    setSellLegs((prev) => [
       ...prev,
       {
         id: `leg-sell-${Date.now()}`,
-        type: 'SELL',
         date: new Date().toISOString().split('T')[0],
-        price: defaultPrice,
+        price: '', // Always start blank so user enters true market selling price!
         quantity: defaultQty,
-        charges: String(autoChg),
-        notes: multiSellLegs.length === 0 ? 'Partial Exit' : `Tranche ${multiSellLegs.length + 1}`
+        charges: '0',
+        notes: `Tranche ${prev.length + 1}`
       }
     ]);
   };
 
   // Remove leg
   const handleRemoveLeg = (id) => {
-    setLegs((prev) => prev.filter((l) => l.id !== id));
+    setSellLegs((prev) => prev.filter((l) => l.id !== id));
   };
 
   // Update leg field
   const handleUpdateLeg = (id, field, value) => {
-    setLegs((prev) =>
+    setSellLegs((prev) =>
       prev.map((l) => {
         if (l.id !== id) return l;
         const updated = { ...l, [field]: value };
         if (field === 'quantity' || field === 'price') {
           const q = parseInt(field === 'quantity' ? value : l.quantity, 10) || 0;
           const p = parseFloat(field === 'price' ? value : l.price) || 0;
-          if (q > 0 && p > 0 && l.type === 'SELL') {
+          if (q > 0 && p > 0) {
             updated.charges = String(calculateIpoCharges(q, p, false));
           }
         }
@@ -199,15 +218,26 @@ export function IpoAllotmentModal({
     e.preventDefault();
     if (isSubmitting) return;
 
+    const finalShares = parseInt(allottedShares, 10) || 1;
+    const finalPrice = parseFloat(allottedPrice) || (computedTotalCost > 0 && finalShares > 0 ? computedTotalCost / finalShares : 0);
+
     setIsSubmitting(true);
     try {
-      const cleanShares = parseInt(allottedShares, 10) || 1;
-      const cleanPrice = parseFloat(allottedPrice) || 0;
-
       let transactionsPayload = null;
       let finalSellPrice = null;
       let finalSellDate = null;
       let finalCharges = 0;
+
+      // Base Allotment Entry (BUY)
+      const buyLeg = {
+        id: `leg-buy-allotment`,
+        type: 'BUY',
+        date: ipo.createdAt ? String(ipo.createdAt).slice(0, 10) : new Date().toISOString().split('T')[0],
+        price: finalPrice,
+        quantity: finalShares,
+        charges: 0,
+        notes: 'IPO Allotment'
+      };
 
       if (mode === 'simple') {
         finalSellPrice = isExited && sellPrice ? parseFloat(sellPrice) : null;
@@ -215,23 +245,15 @@ export function IpoAllotmentModal({
         finalCharges = isExited ? (parseFloat(simpleCharges) || 0) : 0;
 
         transactionsPayload = [
-          {
-            id: `leg-buy-${Date.now()}`,
-            type: 'BUY',
-            date: ipo.createdAt ? String(ipo.createdAt).slice(0, 10) : new Date().toISOString().split('T')[0],
-            price: cleanPrice,
-            quantity: cleanShares,
-            charges: parseFloat(allotmentCharges) || 0,
-            notes: 'IPO Allotment'
-          },
+          buyLeg,
           ...(isExited && finalSellPrice
             ? [
                 {
-                  id: `leg-sell-${Date.now() + 1}`,
+                  id: `leg-sell-exit`,
                   type: 'SELL',
                   date: finalSellDate || new Date().toISOString().split('T')[0],
                   price: finalSellPrice,
-                  quantity: cleanShares,
+                  quantity: finalShares,
                   charges: finalCharges,
                   notes: 'Full Exit'
                 }
@@ -240,27 +262,32 @@ export function IpoAllotmentModal({
         ];
       } else {
         // Multi-leg mode
-        transactionsPayload = legs.map((l) => ({
-          ...l,
+        const processedSellLegs = sellLegs.map((l) => ({
+          id: l.id,
+          type: 'SELL',
+          date: l.date,
           quantity: parseInt(l.quantity, 10) || 1,
           price: parseFloat(l.price) || 0,
-          charges: parseFloat(l.charges) || 0
+          charges: parseFloat(l.charges) || 0,
+          notes: l.notes || ''
         }));
 
-        const sLegs = transactionsPayload.filter((l) => l.type === 'SELL');
-        const sQty = sLegs.reduce((acc, l) => acc + l.quantity, 0);
-        const sRev = sLegs.reduce((acc, l) => acc + l.price * l.quantity, 0);
+        const validSells = processedSellLegs.filter((l) => l.quantity > 0 && l.price > 0);
+        const sQty = validSells.reduce((acc, l) => acc + l.quantity, 0);
+        const sRev = validSells.reduce((acc, l) => acc + l.price * l.quantity, 0);
         finalSellPrice = sQty > 0 ? sRev / sQty : null;
-        finalSellDate = sLegs.length > 0 ? sLegs[sLegs.length - 1].date : null;
-        finalCharges = transactionsPayload.reduce((acc, l) => acc + l.charges, 0);
+        finalSellDate = validSells.length > 0 ? validSells[validSells.length - 1].date : null;
+        finalCharges = validSells.reduce((acc, l) => acc + l.charges, 0);
+
+        transactionsPayload = [buyLeg, ...processedSellLegs];
       }
 
       await onSaveAllotment({
         personName,
         allotted: true,
         applied: true,
-        allottedShares: cleanShares,
-        allottedPrice: cleanPrice,
+        allottedShares: finalShares,
+        allottedPrice: finalPrice,
         sellPrice: finalSellPrice,
         sellDate: finalSellDate,
         charges: finalCharges,
@@ -318,7 +345,7 @@ export function IpoAllotmentModal({
 
         {/* Scrollable Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 scrollbar-thin scrollbar-thumb-slate-700">
-          {/* Section 1: Allotment Position Setup */}
+          {/* Section 1: Allotment Basis Setup */}
           <div className="bg-slate-950/60 border border-slate-800/90 rounded-2xl p-3.5 sm:p-4 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -326,53 +353,64 @@ export function IpoAllotmentModal({
                 1. Allotment Basis
               </span>
               <span className="text-xs font-mono text-indigo-300 font-bold bg-indigo-950/40 px-2 py-0.5 rounded-md border border-indigo-500/30">
-                Total Cost: {formatCurrency(totalAllotmentCost)}
+                Total Allotment: {formatCurrency(computedTotalCost)}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Field 1: Allotted Shares */}
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Allotted Shares <span className="text-rose-400">*</span>
+                  Allotted Shares (Qty) <span className="text-rose-400">*</span>
                 </label>
                 <input
                   type="number"
                   min="1"
                   step="1"
                   required
-                  value={allottedShares}
-                  onChange={(e) => {
-                    setAllottedShares(e.target.value);
-                    if (mode === 'multileg' && legs.length > 0 && legs[0].type === 'BUY') {
-                      handleUpdateLeg(legs[0].id, 'quantity', e.target.value);
-                    }
-                  }}
                   placeholder="e.g. 50"
+                  value={allottedShares}
+                  onChange={(e) => handleSharesChange(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition"
                 />
               </div>
 
+              {/* Field 2: Issue Price per Share */}
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Issue / Allotment Price (₹) <span className="text-rose-400">*</span>
+                  Issue Price per Share (₹) <span className="text-rose-400">*</span>
                 </label>
                 <input
                   type="number"
                   min="0.01"
                   step="any"
                   required
-                  value={allottedPrice}
-                  onChange={(e) => {
-                    setAllottedPrice(e.target.value);
-                    if (mode === 'multileg' && legs.length > 0 && legs[0].type === 'BUY') {
-                      handleUpdateLeg(legs[0].id, 'price', e.target.value);
-                    }
-                  }}
                   placeholder="e.g. 300"
+                  value={allottedPrice}
+                  onChange={(e) => handlePriceChange(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition"
                 />
               </div>
+
+              {/* Field 3: Total Lot / Allotment Cost */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Total Lot Cost (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  placeholder="e.g. 15000"
+                  value={totalLotCostInput}
+                  onChange={(e) => handleTotalCostChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-indigo-300 font-mono text-sm focus:outline-none focus:border-indigo-500 transition"
+                />
+              </div>
             </div>
+            <p className="text-[11px] text-slate-500">
+              💡 Tip: Enter Shares & Issue Price to auto-calculate Total Cost, or enter Lot Cost to calculate price per share.
+            </p>
           </div>
 
           {/* Section 2: Mode Toggle */}
@@ -398,7 +436,7 @@ export function IpoAllotmentModal({
                 type="button"
                 onClick={() => {
                   setMode('multileg');
-                  if (legs.filter((l) => l.type === 'SELL').length === 0 && isExited && sellPrice) {
+                  if (sellLegs.length === 0 && isExited && sellPrice) {
                     handleAddSellLeg();
                   }
                 }}
@@ -448,9 +486,9 @@ export function IpoAllotmentModal({
                       min="0.01"
                       step="any"
                       required={isExited}
+                      placeholder="e.g. 450"
                       value={sellPrice}
                       onChange={(e) => setSellPrice(e.target.value)}
-                      placeholder="e.g. 450"
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-emerald-500 transition"
                     />
                   </div>
@@ -506,21 +544,21 @@ export function IpoAllotmentModal({
                 <div
                   className={clsx(
                     'p-3.5 rounded-2xl border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 animate-in fade-in',
-                    simpleNetPnl >= 0
+                    (simpleNetPnl || 0) >= 0
                       ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-200'
                       : 'bg-rose-950/30 border-rose-500/30 text-rose-200'
                   )}
                 >
                   <div className="space-y-0.5">
                     <div className="text-[11px] text-slate-400 flex items-center gap-2">
-                      <span>Gross: {formatCurrency(simpleSellRevenue - totalAllotmentCost)}</span>
+                      <span>Gross: {formatCurrency(simpleSellRevenue - computedTotalCost)}</span>
                       <span>•</span>
                       <span>Charges: {formatCurrency(simpleChargesNum)}</span>
                     </div>
                     <div className="text-sm font-bold flex items-center gap-1.5">
                       <span>Net Realized P&L:</span>
                       <span className="font-mono text-base">
-                        {simpleNetPnl >= 0 ? '+' : ''}
+                        {(simpleNetPnl || 0) >= 0 ? '+' : ''}
                         {formatCurrency(simpleNetPnl)}
                       </span>
                     </div>
@@ -549,16 +587,16 @@ export function IpoAllotmentModal({
                 <div className="flex items-center gap-3 text-xs font-mono flex-wrap">
                   <div>
                     <span className="text-slate-400">Allotted: </span>
-                    <span className="text-white font-bold">{multiTotalBuyQty} sh</span>
+                    <span className="text-white font-bold">{sharesNum} sh</span>
                   </div>
                   <div>
                     <span className="text-slate-400">Sold: </span>
-                    <span className="text-emerald-400 font-bold">{multiTotalSellQty} sh</span>
+                    <span className="text-emerald-400 font-bold">{totalSoldShares} sh</span>
                   </div>
                   <div>
                     <span className="text-slate-400">Remaining: </span>
-                    <span className={clsx('font-bold', multiRemainingQty > 0 ? 'text-indigo-300' : 'text-slate-500')}>
-                      {multiRemainingQty} sh
+                    <span className={clsx('font-bold', remainingShares > 0 ? 'text-indigo-300' : 'text-slate-500')}>
+                      {remainingShares} sh
                     </span>
                   </div>
                 </div>
@@ -573,49 +611,41 @@ export function IpoAllotmentModal({
                 </button>
               </div>
 
-              {/* Legs Container */}
+              {/* Partial Sell Tranches List (ONLY SELL TRANCHES) */}
               <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-700">
-                {legs.map((leg, idx) => {
-                  const isBuy = leg.type === 'BUY';
-                  return (
+                {sellLegs.length === 0 ? (
+                  <div className="py-6 text-center text-slate-500 text-xs bg-slate-950/40 rounded-2xl border border-slate-800/60 p-4">
+                    <p className="font-medium text-slate-400">No partial sell tranches added yet.</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Click <span className="text-emerald-400 font-semibold">+ Add Partial Sell</span> above to record a sell tranche.
+                    </p>
+                  </div>
+                ) : (
+                  sellLegs.map((leg, idx) => (
                     <div
                       key={leg.id}
-                      className={clsx(
-                        'p-3 rounded-2xl border space-y-2 transition',
-                        isBuy
-                          ? 'bg-indigo-950/20 border-indigo-500/30'
-                          : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
-                      )}
+                      className="p-3 rounded-2xl border bg-slate-950/70 border-slate-800 hover:border-slate-700 space-y-2 transition"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span
-                          className={clsx(
-                            'text-[10px] font-bold px-2 py-0.5 rounded-lg font-mono uppercase shrink-0',
-                            isBuy
-                              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
-                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                          )}
-                        >
-                          {isBuy ? 'ALLOTMENT ENTRY' : `TRANCHE #${idx}`}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg font-mono uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          SELL TRANCHE #{idx + 1}
                         </span>
 
-                        {!isBuy && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveLeg(leg.id)}
-                            className="p-1 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition active:scale-90"
-                            title="Remove partial sell leg"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLeg(leg.id)}
+                          className="p-1 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition active:scale-90"
+                          title="Remove sell tranche"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
 
                       {/* Responsive Grid of Inputs */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {/* Date */}
-                        <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">Date</label>
+                        <div className="min-w-0">
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Sell Date</label>
                           <input
                             type="date"
                             value={leg.date}
@@ -625,8 +655,8 @@ export function IpoAllotmentModal({
                         </div>
 
                         {/* Quantity */}
-                        <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">Shares</label>
+                        <div className="min-w-0">
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Shares Sold</label>
                           <input
                             type="number"
                             min="1"
@@ -638,13 +668,13 @@ export function IpoAllotmentModal({
                         </div>
 
                         {/* Price */}
-                        <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">Price (₹)</label>
+                        <div className="min-w-0">
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Selling Price (₹)</label>
                           <input
                             type="number"
                             min="0.01"
                             step="any"
-                            placeholder="Price"
+                            placeholder="e.g. 480"
                             value={leg.price}
                             onChange={(e) => handleUpdateLeg(leg.id, 'price', e.target.value)}
                             className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-xs focus:outline-none"
@@ -652,7 +682,7 @@ export function IpoAllotmentModal({
                         </div>
 
                         {/* Charges */}
-                        <div>
+                        <div className="min-w-0">
                           <label className="block text-[10px] text-slate-500 mb-0.5">Charges (₹)</label>
                           <input
                             type="number"
@@ -669,18 +699,18 @@ export function IpoAllotmentModal({
                       {/* Tranche Notes */}
                       <input
                         type="text"
-                        placeholder="Tranche notes (e.g. Listing Day 50% Profit Booking)..."
+                        placeholder="Tranche remarks (e.g. Listing Day 50% Profit Booking)..."
                         value={leg.notes}
                         onChange={(e) => handleUpdateLeg(leg.id, 'notes', e.target.value)}
                         className="w-full px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-lg text-white text-xs placeholder-slate-600 focus:outline-none focus:border-indigo-500"
                       />
                     </div>
-                  );
-                })}
+                  ))
+                )}
               </div>
 
               {/* Multi-Leg Live Calculation Banner */}
-              {multiSellLegs.length > 0 && (
+              {sellLegs.length > 0 && totalSoldShares > 0 && (
                 <div
                   className={clsx(
                     'p-3.5 rounded-2xl border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 animate-in fade-in',
@@ -691,9 +721,9 @@ export function IpoAllotmentModal({
                 >
                   <div className="space-y-0.5">
                     <div className="text-[11px] text-slate-400 flex items-center gap-2">
-                      <span>Sold: {multiTotalSellQty} sh ({formatCurrency(multiSellRevenue)})</span>
+                      <span>Sold: {totalSoldShares} sh ({formatCurrency(multiSellRevenue)})</span>
                       <span>•</span>
-                      <span>Charges: {formatCurrency(multiTotalCharges)}</span>
+                      <span>Total Charges: {formatCurrency(multiTotalCharges)}</span>
                     </div>
                     <div className="text-sm font-bold flex items-center gap-1.5">
                       <span>Realized Net P&L:</span>

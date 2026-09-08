@@ -201,14 +201,41 @@ export const calculateIpoMetrics = (ipo) => {
   if (!ipo) return { profitLoss: 0, totalInvested: 0, percentage: null, charges: 0, allottedCount: 0 };
 
   const manualPl = parseFloat(ipo.profitLoss) || 0;
-  const lotCost = parseFloat(ipo.lotCost) || 0;
+  const rawLotCost = parseFloat(ipo.lotCost) || 0;
+  const rawLotSize = parseInt(ipo.lotSize, 10) || 0;
+  const rawIssuePrice = parseFloat(ipo.issuePrice) || 0;
   const applications = ipo.applications || [];
+
+  // Derive effective lotCost, lotSize, and issuePrice from applications if not explicitly set
+  let effectiveLotCost = rawLotCost;
+  let effectiveLotSize = rawLotSize;
+  let effectiveIssuePrice = rawIssuePrice;
+
+  const appWithDetails = applications.find(
+    (a) => (parseInt(a.allottedShares, 10) > 0 && parseFloat(a.allottedPrice) > 0) ||
+           parseInt(a.allottedShares, 10) > 0 ||
+           parseFloat(a.allottedPrice) > 0
+  );
+
+  if (appWithDetails) {
+    if (effectiveLotSize === 0 && parseInt(appWithDetails.allottedShares, 10) > 0) {
+      effectiveLotSize = parseInt(appWithDetails.allottedShares, 10);
+    }
+    if (effectiveIssuePrice === 0 && parseFloat(appWithDetails.allottedPrice) > 0) {
+      effectiveIssuePrice = parseFloat(appWithDetails.allottedPrice);
+    }
+    if (effectiveLotCost === 0) {
+      if (effectiveLotSize > 0 && effectiveIssuePrice > 0) {
+        effectiveLotCost = Math.round(effectiveLotSize * effectiveIssuePrice * 100) / 100;
+      }
+    }
+  }
 
   const allottedApps = applications.filter((a) => a.allotted);
   const allottedCount = allottedApps.length;
 
   if (allottedCount === 0) {
-    const defaultCost = lotCost > 0 ? lotCost : 0;
+    const defaultCost = effectiveLotCost > 0 ? effectiveLotCost : 0;
     const pct = defaultCost > 0 && manualPl !== 0 ? (manualPl / defaultCost) * 100 : null;
     return {
       profitLoss: manualPl,
@@ -222,7 +249,10 @@ export const calculateIpoMetrics = (ipo) => {
       hasDetails: false,
       isFullyClosed: false,
       isOpen: true,
-      hasSells: false
+      hasSells: false,
+      effectiveLotCost,
+      effectiveLotSize,
+      effectiveIssuePrice
     };
   }
 
@@ -255,7 +285,7 @@ export const calculateIpoMetrics = (ipo) => {
 
   // If none of the applications have sell details yet, fallback to manual IPO profitLoss if provided
   const finalProfitLoss = hasAnySells ? totalRealizedPnl : manualPl;
-  const fallbackInvested = totalInvestedCost > 0 ? totalInvestedCost : (allottedCount * lotCost || lotCost);
+  const fallbackInvested = totalInvestedCost > 0 ? totalInvestedCost : (allottedCount * effectiveLotCost || effectiveLotCost);
   const finalPercent = fallbackInvested > 0 && (hasAnySells || manualPl !== 0)
     ? (finalProfitLoss / fallbackInvested) * 100
     : null;
@@ -273,6 +303,9 @@ export const calculateIpoMetrics = (ipo) => {
     isFullyClosed: closedCount === allottedCount && allottedCount > 0,
     isPartial: hasAnySells && closedCount < allottedCount,
     isOpen: !hasAnySells,
-    hasSells: hasAnySells
+    hasSells: hasAnySells,
+    effectiveLotCost,
+    effectiveLotSize,
+    effectiveIssuePrice
   };
 };

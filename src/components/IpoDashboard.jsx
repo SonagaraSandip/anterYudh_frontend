@@ -463,6 +463,10 @@ export default function IpoDashboard({ isEmbedded = false }) {
     const { ipo, personName } = allotmentModalTarget;
     const ipoId = ipo.id;
 
+    const shares = parseInt(allotmentData.allottedShares, 10) || 0;
+    const price = parseFloat(allotmentData.allottedPrice) || 0;
+    const computedLotCost = shares > 0 && price > 0 ? Math.round(shares * price * 100) / 100 : 0;
+
     // 1. Optimistic Update
     setIpos((prev) =>
       prev.map((i) => {
@@ -488,7 +492,18 @@ export default function IpoDashboard({ isEmbedded = false }) {
         } else {
           apps.push(updatedApp);
         }
-        return { ...i, applications: apps };
+
+        const nextLotCost = (parseFloat(i.lotCost) || 0) > 0 ? i.lotCost : (computedLotCost > 0 ? computedLotCost : i.lotCost);
+        const nextLotSize = (parseInt(i.lotSize, 10) || 0) > 0 ? i.lotSize : (shares > 0 ? shares : i.lotSize);
+        const nextIssuePrice = (parseFloat(i.issuePrice) || 0) > 0 ? i.issuePrice : (price > 0 ? price : i.issuePrice);
+
+        return {
+          ...i,
+          lotCost: nextLotCost,
+          lotSize: nextLotSize,
+          issuePrice: nextIssuePrice,
+          applications: apps
+        };
       })
     );
 
@@ -498,6 +513,20 @@ export default function IpoDashboard({ isEmbedded = false }) {
         `${API_BASE}/${ipoId}/application/${encodeURIComponent(personName)}`,
         allotmentData
       );
+
+      // Auto-sync calculated lot cost and lot size to the IPO record if not set
+      if (computedLotCost > 0 && ((parseFloat(ipo.lotCost) || 0) === 0 || (parseInt(ipo.lotSize, 10) || 0) === 0)) {
+        try {
+          await axios.put(`${API_BASE}/${ipoId}`, {
+            lotCost: (parseFloat(ipo.lotCost) || 0) > 0 ? ipo.lotCost : computedLotCost,
+            lotSize: (parseInt(ipo.lotSize, 10) || 0) > 0 ? ipo.lotSize : shares,
+            issuePrice: (parseFloat(ipo.issuePrice) || 0) > 0 ? ipo.issuePrice : price
+          });
+        } catch (e) {
+          console.warn('Could not sync lot cost to IPO record:', e);
+        }
+      }
+
       if (res.data) {
         setIpos((prev) =>
           prev.map((i) => {
@@ -505,7 +534,13 @@ export default function IpoDashboard({ isEmbedded = false }) {
             const apps = (i.applications || []).map((a) =>
               isSamePerson(a.personName, personName) ? res.data : a
             );
-            return { ...i, applications: apps };
+            return {
+              ...i,
+              lotCost: (parseFloat(i.lotCost) || 0) > 0 ? i.lotCost : (computedLotCost || i.lotCost),
+              lotSize: (parseInt(i.lotSize, 10) || 0) > 0 ? i.lotSize : (shares || i.lotSize),
+              issuePrice: (parseFloat(i.issuePrice) || 0) > 0 ? i.issuePrice : (price || i.issuePrice),
+              applications: apps
+            };
           })
         );
       }

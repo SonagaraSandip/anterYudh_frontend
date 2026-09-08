@@ -33,7 +33,9 @@ export const IpoDesktopRow = React.memo(function IpoDesktopRow({
 }) {
   const ipoMetrics = calculateIpoMetrics(ipo);
   const pl = ipoMetrics.profitLoss;
-  const lc = parseFloat(ipo.lotCost) || 0;
+  const lc = ipoMetrics.effectiveLotCost || parseFloat(ipo.lotCost) || 0;
+  const lotSize = ipoMetrics.effectiveLotSize || parseInt(ipo.lotSize, 10) || 0;
+  const issuePrice = ipoMetrics.effectiveIssuePrice || parseFloat(ipo.issuePrice) || 0;
   const isPositive = pl > 0;
   const isNegative = pl < 0;
   const ipoPercent = ipoMetrics.percentage !== null ? ipoMetrics.percentage : calculateIpoPercentage(ipo);
@@ -100,9 +102,17 @@ export const IpoDesktopRow = React.memo(function IpoDesktopRow({
             <button
               onClick={() => onStartEditLotCost(ipo)}
               className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700/80 hover:border-indigo-500/50 transition flex items-center gap-1"
-              title="Click to edit Lot Cost"
+              title={
+                lotSize > 0 && lc > 0
+                  ? `Lot Cost: ${formatCurrency(lc)} (${lotSize} shares${issuePrice > 0 ? ` @ ₹${issuePrice}` : ''})`
+                  : 'Click to edit Lot Cost'
+              }
             >
-              <span>Lot: {lc > 0 ? formatCurrency(lc) : 'Set Cost'}</span>
+              <span>
+                {lc > 0
+                  ? `Lot: ${formatCurrency(lc)}${lotSize > 0 ? ` (${lotSize} sh)` : ''}`
+                  : 'Lot: Set Cost'}
+              </span>
               <Edit2 className="w-2.5 h-2.5 opacity-60 shrink-0" />
             </button>
           )}
