@@ -1,5 +1,7 @@
 import React from 'react';
-import { Users, Edit2, Calendar, Trash2 } from 'lucide-react';
+import { Users, Edit2, Calendar, Trash2, Split, CheckCircle2, ChevronRight, Layers, Coins } from 'lucide-react';
+import clsx from 'clsx';
+import { calculateApplicationMetrics, calculateIpoMetrics } from '../../utils/ipoCalculator';
 
 const isSamePerson = (p1, p2) =>
   String(p1 || '').trim().toLowerCase() === String(p2 || '').trim().toLowerCase();
@@ -22,16 +24,19 @@ export const IpoDesktopRow = React.memo(function IpoDesktopRow({
   onToggleApplication,
   onToggleAllottedWithConfirm,
   onUpdatePersonNotes,
+  onOpenAllotmentModal,
+  onOpenQuickPartialSellModal,
   onDeleteIpo,
   formatDate,
   formatCurrency,
   calculateIpoPercentage
 }) {
-  const pl = parseFloat(ipo.profitLoss) || 0;
+  const ipoMetrics = calculateIpoMetrics(ipo);
+  const pl = ipoMetrics.profitLoss;
   const lc = parseFloat(ipo.lotCost) || 0;
   const isPositive = pl > 0;
   const isNegative = pl < 0;
-  const ipoPercent = calculateIpoPercentage(ipo);
+  const ipoPercent = ipoMetrics.percentage !== null ? ipoMetrics.percentage : calculateIpoPercentage(ipo);
   const appliedCount = (ipo.applications || []).filter((a) => a.applied).length;
   const totalDematCount = persons.length;
 
@@ -128,14 +133,17 @@ export const IpoDesktopRow = React.memo(function IpoDesktopRow({
           notes: ''
         };
 
+        const appMetrics = app.allotted ? calculateApplicationMetrics(app, ipo) : null;
+
         return (
           <td
             key={person}
-            className={`py-1.5 px-2 min-w-[150px] max-w-[180px] border-r border-slate-800/80 align-middle transition-colors ${
+            className={`py-1.5 px-2 min-w-[160px] max-w-[200px] border-r border-slate-800/80 align-middle transition-colors ${
               app.allotted ? 'bg-emerald-950/25' : app.applied ? 'bg-indigo-950/40' : ''
             }`}
           >
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1.5">
+              {/* Checkboxes Row */}
               <div className="grid grid-cols-2 gap-1">
                 {/* Applied Checkbox */}
                 <label
@@ -175,6 +183,55 @@ export const IpoDesktopRow = React.memo(function IpoDesktopRow({
                   </span>
                 </label>
               </div>
+
+              {/* Allotted Details Pill & Trading Controls */}
+              {app.allotted && appMetrics && (
+                <div className="flex items-center justify-between gap-1 p-1 bg-slate-950/90 rounded-lg border border-slate-800 text-[10px] font-mono">
+                  {/* Status / P&L Badge */}
+                  <div
+                    onClick={() => onOpenAllotmentModal && onOpenAllotmentModal(ipo, person, app)}
+                    className="cursor-pointer hover:underline flex items-center gap-1 truncate"
+                    title="Click to manage Allotment shares, issue price & partial sell tranches"
+                  >
+                    {appMetrics.isFullyClosed ? (
+                      <span className={clsx('font-bold', (appMetrics.returnsInr || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                        {(appMetrics.returnsInr || 0) >= 0 ? '+' : ''}
+                        {formatCurrency(appMetrics.returnsInr)}
+                      </span>
+                    ) : appMetrics.isPartial ? (
+                      <span className="text-amber-300 font-bold">
+                        {appMetrics.remainingShares}/{appMetrics.allottedShares} sh
+                      </span>
+                    ) : (
+                      <span className="text-indigo-300">
+                        {appMetrics.allottedShares} sh @ ₹{appMetrics.allottedPrice}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Actions: Quick Partial Sell & Full Modal */}
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {!appMetrics.isFullyClosed && onOpenQuickPartialSellModal && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenQuickPartialSellModal(ipo, person, app)}
+                        className="p-0.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition"
+                        title="Quick Partial Sell"
+                      >
+                        <Split className="w-3 h-3" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onOpenAllotmentModal && onOpenAllotmentModal(ipo, person, app)}
+                      className="p-0.5 text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded transition"
+                      title="Manage Allotment & Sells"
+                    >
+                      <Edit2 className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Notes Input per person */}
               <input
@@ -217,7 +274,7 @@ export const IpoDesktopRow = React.memo(function IpoDesktopRow({
           <div
             onClick={() => onStartEditProfitLoss(ipo)}
             className="flex flex-col items-end gap-0.5 cursor-pointer group/pl"
-            title="Click to edit Profit/Loss"
+            title={ipoMetrics.charges > 0 ? `Net P&L (Total Charges: ${formatCurrency(ipoMetrics.charges)})` : "Click to edit Profit/Loss"}
           >
             <div className="inline-flex items-center gap-1">
               <span

@@ -32,6 +32,9 @@ import { exportIposToExcel } from '../utils/excelExporter';
 import { IpoDesktopRow } from './ipo/IpoDesktopRow';
 import { IpoMobileCard } from './ipo/IpoMobileCard';
 import { ReorderPersonsModal } from './ipo/ReorderPersonsModal';
+import { IpoAllotmentModal } from './ipo/IpoAllotmentModal';
+import { IpoQuickPartialSellModal } from './ipo/IpoQuickPartialSellModal';
+import { calculateIpoMetrics, calculateApplicationMetrics } from '../utils/ipoCalculator';
 
 const API_BASE = '/api/ipos';
 
@@ -106,6 +109,10 @@ export default function IpoDashboard({ isEmbedded = false }) {
 
   // Confirmation modal state before deleting a Person / Demat Account column
   const [deletePersonConfirmModal, setDeletePersonConfirmModal] = useState(null);
+
+  // Allotment & Partial Sell Modal States
+  const [allotmentModalTarget, setAllotmentModalTarget] = useState(null); // { ipo, personName, application }
+  const [quickPartialSellTarget, setQuickPartialSellTarget] = useState(null); // { ipo, personName, application }
 
 
   // Inline editing state
@@ -204,7 +211,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
 
   // Handle Escape key and body scroll lock for open modals
   useEffect(() => {
-    const isAnyModalOpen = isAddIpoOpen || isAddPersonOpen || unallotConfirmModal || deletePersonConfirmModal;
+    const isAnyModalOpen = isAddIpoOpen || isAddPersonOpen || unallotConfirmModal || deletePersonConfirmModal || allotmentModalTarget || quickPartialSellTarget;
     if (!isAnyModalOpen) return;
 
     const originalOverflow = document.body.style.overflow;
@@ -216,6 +223,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
         setIsAddPersonOpen(false);
         setUnallotConfirmModal(null);
         setDeletePersonConfirmModal(null);
+        setAllotmentModalTarget(null);
+        setQuickPartialSellTarget(null);
       }
     };
 
@@ -224,7 +233,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
       document.body.style.overflow = originalOverflow;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isAddIpoOpen, isAddPersonOpen, unallotConfirmModal, deletePersonConfirmModal]);
+  }, [isAddIpoOpen, isAddPersonOpen, unallotConfirmModal, deletePersonConfirmModal, allotmentModalTarget, quickPartialSellTarget]);
 
   // Save Custom Person Order and Lock
   const handleSavePersonsOrder = (newOrder) => {
@@ -354,11 +363,25 @@ export default function IpoDashboard({ isEmbedded = false }) {
       if (newVal) nextApplied = true;
     }
 
+    let nextShares = existingApp?.allottedShares || 0;
+    let nextPrice = existingApp?.allottedPrice || 0;
+
+    if (field === 'allotted' && newVal && nextShares === 0 && (targetIpo?.lotCost || 0) > 0) {
+      nextShares = 1;
+      nextPrice = parseFloat(targetIpo.lotCost) || 0;
+    }
+
     const payloadApp = {
       ipoId,
       personName: existingApp?.personName || personName,
       applied: nextApplied,
       allotted: nextAllotted,
+      allottedShares: nextShares,
+      allottedPrice: nextPrice,
+      sellPrice: existingApp?.sellPrice || null,
+      sellDate: existingApp?.sellDate || null,
+      charges: existingApp?.charges || 0,
+      transactions: existingApp?.transactions || null,
       notes: existingApp?.notes || ''
     };
 
@@ -374,7 +397,9 @@ export default function IpoDashboard({ isEmbedded = false }) {
           apps[appIdx] = {
             ...apps[appIdx],
             applied: nextApplied,
-            allotted: nextAllotted
+            allotted: nextAllotted,
+            allottedShares: nextShares,
+            allottedPrice: nextPrice
           };
         } else {
           apps.push(payloadApp);
@@ -419,6 +444,102 @@ export default function IpoDashboard({ isEmbedded = false }) {
           prevIpos.map((ipo) => (ipo.id === ipoId ? targetIpo : ipo))
         );
       }
+    }
+  };
+
+  // Open Allotment Position Manager Modal
+  const handleOpenAllotmentModal = (ipo, personName, application) => {
+    setAllotmentModalTarget({ ipo, personName, application });
+  };
+
+  // Open Quick Partial Sell Modal
+  const handleOpenQuickPartialSellModal = (ipo, personName, application) => {
+    setQuickPartialSellTarget({ ipo, personName, application });
+  };
+
+  // Save full Allotment & Trades from AllotmentManagerModal
+  const handleSaveAllotment = async (allotmentData) => {
+    if (!allotmentModalTarget) return;
+    const { ipo, personName } = allotmentModalTarget;
+    const ipoId = ipo.id;
+
+    // 1. Optimistic Update
+    setIpos((prev) =>
+      prev.map((i) => {
+        if (i.id !== ipoId) return i;
+        const apps = [...(i.applications || [])];
+        const idx = apps.findIndex((a) => isSamePerson(a.personName, personName));
+        const updatedApp = {
+          ...(idx >= 0 ? apps[idx] : {}),
+          ipoId,
+          personName,
+          applied: true,
+          allotted: true,
+          allottedShares: allotmentData.allottedShares,
+          allottedPrice: allotmentData.allottedPrice,
+          sellPrice: allotmentData.sellPrice,
+          sellDate: allotmentData.sellDate,
+          charges: allotmentData.charges,
+          transactions: allotmentData.transactions,
+          notes: allotmentData.notes !== undefined ? allotmentData.notes : (idx >= 0 ? apps[idx].notes : '')
+        };
+        if (idx >= 0) {
+          apps[idx] = updatedApp;
+        } else {
+          apps.push(updatedApp);
+        }
+        return { ...i, applications: apps };
+      })
+    );
+
+    // 2. Guaranteed Backend Update
+    try {
+      const res = await axios.put(
+        `${API_BASE}/${ipoId}/application/${encodeURIComponent(personName)}`,
+        allotmentData
+      );
+      if (res.data) {
+        setIpos((prev) =>
+          prev.map((i) => {
+            if (i.id !== ipoId) return i;
+            const apps = (i.applications || []).map((a) =>
+              isSamePerson(a.personName, personName) ? res.data : a
+            );
+            return { ...i, applications: apps };
+          })
+        );
+      }
+    } catch (err) {
+      console.error('Failed to update allotment on server:', err);
+      fetchIpos();
+    }
+  };
+
+  // Submit Quick Partial Sell
+  const handleSubmitPartialSell = async (partialSellData) => {
+    if (!quickPartialSellTarget) return;
+    const { ipo, personName } = quickPartialSellTarget;
+    const ipoId = ipo.id;
+
+    try {
+      const res = await axios.post(
+        `${API_BASE}/${ipoId}/application/${encodeURIComponent(personName)}/partial-sell`,
+        partialSellData
+      );
+      if (res.data) {
+        setIpos((prev) =>
+          prev.map((i) => {
+            if (i.id !== ipoId) return i;
+            const apps = (i.applications || []).map((a) =>
+              isSamePerson(a.personName, personName) ? res.data : a
+            );
+            return { ...i, applications: apps };
+          })
+        );
+      }
+    } catch (err) {
+      console.error('Failed to record partial sell on server:', err);
+      fetchIpos();
     }
   };
 
@@ -608,32 +729,24 @@ export default function IpoDashboard({ isEmbedded = false }) {
     return (pl / totalCost) * 100;
   };
 
-  // Computed summary stats
+  // Computed summary stats using robust calculation engine
   const stats = useMemo(() => {
     let totalProfitLoss = 0;
     let totalAppliedCount = 0;
     let totalAllottedCount = 0;
     let totalInvestedCost = 0;
+    let totalCharges = 0;
 
     ipos.forEach((ipo) => {
-      const pl = parseFloat(ipo.profitLoss) || 0;
-      const lc = parseFloat(ipo.lotCost) || 0;
-      totalProfitLoss += pl;
+      const m = calculateIpoMetrics(ipo);
+      totalProfitLoss += m.profitLoss;
+      totalInvestedCost += m.totalInvested;
+      totalCharges += m.charges;
 
-      let ipoAllottedLots = 0;
       (ipo.applications || []).forEach((app) => {
         if (app.applied) totalAppliedCount += 1;
-        if (app.allotted) {
-          totalAllottedCount += 1;
-          ipoAllottedLots += 1;
-        }
+        if (app.allotted) totalAllottedCount += 1;
       });
-
-      if (ipoAllottedLots > 0 && lc > 0) {
-        totalInvestedCost += lc * ipoAllottedLots;
-      } else if (pl !== 0 && lc > 0) {
-        totalInvestedCost += lc;
-      }
     });
 
     const allotmentRate =
@@ -652,7 +765,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
       totalAllottedCount,
       allotmentRate,
       totalInvestedCost,
-      overallProfitPercent
+      overallProfitPercent,
+      totalCharges
     };
   }, [ipos]);
 
@@ -1085,6 +1199,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
                   onToggleApplication={handleToggleApplication}
                   onToggleAllottedWithConfirm={handleToggleAllottedWithConfirm}
                   onUpdatePersonNotes={handleUpdatePersonNotes}
+                  onOpenAllotmentModal={handleOpenAllotmentModal}
+                  onOpenQuickPartialSellModal={handleOpenQuickPartialSellModal}
                   onDeleteIpo={handleDeleteIpo}
                   formatDate={formatDate}
                   formatCurrency={formatCurrency}
@@ -1233,6 +1349,8 @@ export default function IpoDashboard({ isEmbedded = false }) {
                         onToggleApplication={handleToggleApplication}
                         onToggleAllottedWithConfirm={handleToggleAllottedWithConfirm}
                         onUpdatePersonNotes={handleUpdatePersonNotes}
+                        onOpenAllotmentModal={handleOpenAllotmentModal}
+                        onOpenQuickPartialSellModal={handleOpenQuickPartialSellModal}
                         onDeleteIpo={handleDeleteIpo}
                         formatDate={formatDate}
                         formatCurrency={formatCurrency}
@@ -1712,6 +1830,30 @@ export default function IpoDashboard({ isEmbedded = false }) {
         onSaveOrder={handleSavePersonsOrder}
         onClose={() => setIsReorderPersonsOpen(false)}
       />
+
+      {/* Modal: Allotment & Trade / Selling Manager */}
+      {allotmentModalTarget && (
+        <IpoAllotmentModal
+          isOpen={Boolean(allotmentModalTarget)}
+          onClose={() => setAllotmentModalTarget(null)}
+          ipo={allotmentModalTarget.ipo}
+          personName={allotmentModalTarget.personName}
+          application={allotmentModalTarget.application}
+          onSaveAllotment={handleSaveAllotment}
+        />
+      )}
+
+      {/* Modal: Quick Partial Sell */}
+      {quickPartialSellTarget && (
+        <IpoQuickPartialSellModal
+          isOpen={Boolean(quickPartialSellTarget)}
+          onClose={() => setQuickPartialSellTarget(null)}
+          ipo={quickPartialSellTarget.ipo}
+          personName={quickPartialSellTarget.personName}
+          application={quickPartialSellTarget.application}
+          onSubmitPartialSell={handleSubmitPartialSell}
+        />
+      )}
     </div>
   );
 }

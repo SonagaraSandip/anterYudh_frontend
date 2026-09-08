@@ -32,6 +32,7 @@ import {
   Database,
   BookOpen
 } from 'lucide-react';
+import { calculateIpoMetrics } from '../utils/ipoCalculator';
 
 export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
   // Live Data States backed by SWR Cache
@@ -181,10 +182,12 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
     let totalProfitLoss = 0;
     let totalApplied = 0;
     let totalAllotted = 0;
+    let totalInvested = 0;
 
     (Array.isArray(ipos) ? ipos : []).forEach((ipo) => {
-      const pl = parseFloat(ipo.profitLoss) || 0;
-      totalProfitLoss += pl;
+      const m = calculateIpoMetrics(ipo);
+      totalProfitLoss += m.profitLoss;
+      totalInvested += m.totalInvested;
 
       (ipo.applications || []).forEach((app) => {
         if (app.applied) totalApplied += 1;
@@ -197,6 +200,7 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
     return {
       count: ipos.length,
       totalProfitLoss,
+      totalInvested,
       totalApplied,
       totalAllotted,
       allotmentRate

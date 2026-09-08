@@ -1,6 +1,7 @@
 import React from 'react';
-import { Users, Edit2, ChevronDown, Trash2, Calendar, CheckCircle2 } from 'lucide-react';
+import { Users, Edit2, ChevronDown, Trash2, Calendar, CheckCircle2, Split, Layers, Coins } from 'lucide-react';
 import clsx from 'clsx';
+import { calculateApplicationMetrics, calculateIpoMetrics } from '../../utils/ipoCalculator';
 
 const isSamePerson = (p1, p2) =>
   String(p1 || '').trim().toLowerCase() === String(p2 || '').trim().toLowerCase();
@@ -25,16 +26,19 @@ export const IpoMobileCard = React.memo(function IpoMobileCard({
   onToggleApplication,
   onToggleAllottedWithConfirm,
   onUpdatePersonNotes,
+  onOpenAllotmentModal,
+  onOpenQuickPartialSellModal,
   onDeleteIpo,
   formatDate,
   formatCurrency,
   calculateIpoPercentage
 }) {
-  const pl = parseFloat(ipo.profitLoss) || 0;
+  const ipoMetrics = calculateIpoMetrics(ipo);
+  const pl = ipoMetrics.profitLoss;
   const lc = parseFloat(ipo.lotCost) || 0;
   const isPositive = pl > 0;
   const isNegative = pl < 0;
-  const ipoPercent = calculateIpoPercentage(ipo);
+  const ipoPercent = ipoMetrics.percentage !== null ? ipoMetrics.percentage : calculateIpoPercentage(ipo);
   const appliedCount = (ipo.applications || []).filter((a) => a.applied).length;
   const allottedCount = (ipo.applications || []).filter((a) => a.allotted).length;
   const totalDematCount = persons.length;
@@ -90,7 +94,7 @@ export const IpoMobileCard = React.memo(function IpoMobileCard({
                     ? 'bg-rose-950/40 text-rose-400 border-rose-500/30'
                     : 'bg-slate-950 text-slate-300 border-slate-800'
                 )}
-                title="Click to edit P&L"
+                title={ipoMetrics.charges > 0 ? `Net P&L (Total Charges: ${formatCurrency(ipoMetrics.charges)})` : "Click to edit P&L"}
               >
                 {isPositive ? '+' : ''}
                 {formatCurrency(pl)}
@@ -179,7 +183,7 @@ export const IpoMobileCard = React.memo(function IpoMobileCard({
               </span>
             </span>
 
-            {/* Allotted Badge (Shown when allotted > 0) */}
+            {/* Allotted Badge */}
             {allottedCount > 0 && (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-[10px] font-semibold font-mono animate-fadeIn">
                 <CheckCircle2 className="w-3 h-3 text-emerald-400" />
@@ -232,6 +236,8 @@ export const IpoMobileCard = React.memo(function IpoMobileCard({
                 allotted: false,
                 notes: ''
               };
+
+              const appMetrics = app.allotted ? calculateApplicationMetrics(app, ipo) : null;
 
               return (
                 <div
@@ -286,6 +292,54 @@ export const IpoMobileCard = React.memo(function IpoMobileCard({
                       </label>
                     </div>
                   </div>
+
+                  {/* Allotment & Trading Quick Bar */}
+                  {app.allotted && appMetrics && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono gap-2">
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="text-[11px] text-slate-400">
+                          {appMetrics.allottedShares} sh @ ₹{appMetrics.allottedPrice}
+                        </div>
+                        <div className="font-bold text-xs truncate">
+                          {appMetrics.isFullyClosed ? (
+                            <span className={(appMetrics.returnsInr || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                              Net P&L: {(appMetrics.returnsInr || 0) >= 0 ? '+' : ''}{formatCurrency(appMetrics.returnsInr)}
+                            </span>
+                          ) : appMetrics.isPartial ? (
+                            <span className="text-amber-300">
+                              Partial Exit: {appMetrics.remainingShares} sh open
+                            </span>
+                          ) : (
+                            <span className="text-indigo-300">
+                              Position Open (Cost: {formatCurrency(appMetrics.totalInvested)})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                        {!appMetrics.isFullyClosed && onOpenQuickPartialSellModal && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenQuickPartialSellModal(ipo, person, app)}
+                            className="px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition active:scale-95"
+                          >
+                            <Split className="w-3 h-3" />
+                            <span>Sell</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => onOpenAllotmentModal && onOpenAllotmentModal(ipo, person, app)}
+                          className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition active:scale-95"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                          <span>Manage</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <input
                     type="text"
                     placeholder="App notes..."
