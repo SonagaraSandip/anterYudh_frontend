@@ -146,6 +146,9 @@ const applyTotalRowStyle = (row, bgArgb = 'FFF1F5F9') => {
   });
 };
 
+const isSamePerson = (p1, p2) =>
+  String(p1 || '').trim().toLowerCase() === String(p2 || '').trim().toLowerCase();
+
 // =========================================================================
 // 1. IPO DATA EXCEL EXPORT (Matrix Grid with Colors & Visual Accents)
 // =========================================================================
@@ -155,15 +158,13 @@ export const exportIposToExcel = async (ipos = []) => {
     return;
   }
 
-  const isSamePerson = (p1, p2) =>
-    String(p1 || '').trim().toLowerCase() === String(p2 || '').trim().toLowerCase();
-
   // 1. Collect all unique persons in clean order
   let savedPersons = [];
   try {
-    savedPersons = JSON.parse(localStorage.getItem('antaryudh_demat_persons') || '[]');
-  } catch {
-    savedPersons = [];
+    const raw = localStorage.getItem('antaryudh_demat_persons');
+    if (raw) savedPersons = JSON.parse(raw);
+  } catch (err) {
+    console.warn('Failed to parse saved Demat persons:', err);
   }
 
   const personMap = new Map();
@@ -617,7 +618,9 @@ export const exportExpensesToExcel = async (transactions = [], activeMonth = 'al
         if (!isNaN(d.getTime())) {
           mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         }
-      } catch {}
+      } catch {
+        // Ignore date parse errors and keep 'Unknown'
+      }
     }
     if (!monthMap.has(mKey)) {
       monthMap.set(mKey, { expense: 0, income: 0, count: 0 });
@@ -721,7 +724,16 @@ const calculateTradeDetails = (trade) => {
     const realizedBuyCharges = totalBuyCharges * soldRatio;
     const realizedCharges = totalSellCharges + realizedBuyCharges;
 
-    const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - realizedCharges : null;
+    const isMtf = trade.tradeType === 'mtf';
+    const totalInvested = avgBuyPrice * totalBuyQty;
+    const mtfFundedAmount = parseFloat(trade.mtfFundedAmount) || (isMtf ? totalInvested * 0.75 : 0);
+
+    const bDateStr = buyLegs[0]?.date || trade.buyDate;
+    const sDateStr = sellLegs[sellLegs.length - 1]?.date || trade.sellDate;
+    const holdingDays = calcHoldingDays(bDateStr, sDateStr, status);
+    const mtfInterest = isMtf && holdingDays ? Number(((mtfFundedAmount * soldRatio * 0.1495 / 365) * holdingDays).toFixed(2)) : 0;
+
+    const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - realizedCharges - mtfInterest : null;
     const returnsPercent = hasSells && costBasisOfSold > 0 ? (returnsInr / costBasisOfSold) * 100 : 0;
 
     const buyDate = buyLegs[0]?.date || trade.buyDate;
@@ -731,7 +743,7 @@ const calculateTradeDetails = (trade) => {
       buyDate,
       avgBuyPrice: Number(avgBuyPrice.toFixed(2)),
       totalBuyQty,
-      invested: Number((avgBuyPrice * totalBuyQty).toFixed(2)),
+      invested: Number(totalInvested.toFixed(2)),
       sellDate: sellDate ? sellDate : '',
       avgSellPrice: avgSellPrice !== null ? Number(avgSellPrice.toFixed(2)) : '',
       totalSellQty,
@@ -739,6 +751,9 @@ const calculateTradeDetails = (trade) => {
       status,
       realizedValue: hasSells ? Number(totalSellRevenue.toFixed(2)) : '',
       charges: Number((isFullyClosed ? totalCharges : (hasSells ? realizedCharges : totalBuyCharges)).toFixed(2)),
+      isMtf,
+      mtfFundedAmount: Number(mtfFundedAmount.toFixed(2)),
+      mtfInterest,
       returnsInr: returnsInr !== null ? Number(returnsInr.toFixed(2)) : '',
       returnsPercent: hasSells ? Number(returnsPercent.toFixed(2)) : '',
       rawTx
@@ -753,7 +768,13 @@ const calculateTradeDetails = (trade) => {
   const isClosed = sellP !== null && Boolean(trade.sellDate);
   const invested = buyP * qty;
   const sellVal = isClosed ? sellP * qty : 0;
-  const returnsInr = isClosed ? sellVal - invested - charges : null;
+
+  const isMtf = trade.tradeType === 'mtf';
+  const mtfFundedAmount = parseFloat(trade.mtfFundedAmount) || (isMtf ? invested * 0.75 : 0);
+  const holdingDays = calcHoldingDays(trade.buyDate, trade.sellDate, isClosed ? 'CLOSED' : 'OPEN');
+  const mtfInterest = isMtf && holdingDays ? Number(((mtfFundedAmount * 0.1495 / 365) * holdingDays).toFixed(2)) : 0;
+
+  const returnsInr = isClosed ? sellVal - invested - charges - mtfInterest : null;
   const returnsPercent = isClosed && invested > 0 ? (returnsInr / invested) * 100 : 0;
 
   return {
@@ -768,6 +789,9 @@ const calculateTradeDetails = (trade) => {
     status: isClosed ? 'CLOSED' : 'OPEN',
     realizedValue: isClosed ? Number(sellVal.toFixed(2)) : '',
     charges: charges,
+    isMtf,
+    mtfFundedAmount: Number(mtfFundedAmount.toFixed(2)),
+    mtfInterest,
     returnsInr: returnsInr !== null ? Number(returnsInr.toFixed(2)) : '',
     returnsPercent: isClosed ? Number(returnsPercent.toFixed(2)) : '',
     rawTx: []
@@ -801,8 +825,9 @@ export const exportTradesToExcel = async (trades = []) => {
   workbook.creator = 'AntarYudh Financial Suite';
   workbook.created = new Date();
 
-  const stockTrades = trades.filter((t) => t.tradeType === 'stock' || !t.tradeType);
+  const stockTrades = trades.filter((t) => t.tradeType === 'stock' || (!t.tradeType && t.tradeType !== 'intraday' && t.tradeType !== 'mtf'));
   const intradayTrades = trades.filter((t) => t.tradeType === 'intraday');
+  const mtfTrades = trades.filter((t) => t.tradeType === 'mtf');
 
   // -------------------------------------------------------------
   // SHEET 1: Stock & Swing Trades
@@ -1026,7 +1051,120 @@ export const exportTradesToExcel = async (trades = []) => {
   applyAutoColWidths(wsIntraday, 12, 40);
 
   // -------------------------------------------------------------
-  // SHEET 3: Multi-Leg Execution History Breakdown
+  // SHEET 3: MTF Margin Trades (Margin Trade Facility)
+  // -------------------------------------------------------------
+  const wsMtf = workbook.addWorksheet('MTF Margin Trades', {
+    views: [{ state: 'frozen', ySplit: 1, showGridLines: true }]
+  });
+
+  wsMtf.columns = [
+    { header: 'Trade ID', key: 'id', width: 12 },
+    { header: 'Asset / Symbol', key: 'asset', width: 20 },
+    { header: 'Entry Date', key: 'entryDate', width: 14 },
+    { header: 'Avg Entry (₹)', key: 'avgBuyPrice', width: 15 },
+    { header: 'Total Buy Qty', key: 'buyQty', width: 14 },
+    { header: 'Total Value (₹)', key: 'invested', width: 16 },
+    { header: 'Funded Capital (₹)', key: 'funded', width: 18 },
+    { header: 'Exit Date', key: 'exitDate', width: 14 },
+    { header: 'Avg Exit (₹)', key: 'avgSellPrice', width: 15 },
+    { header: 'Sold Qty', key: 'sellQty', width: 12 },
+    { header: 'Position Status', key: 'status', width: 15 },
+    { header: 'Hold (Days)', key: 'holdingDays', width: 13 },
+    { header: 'Brokerage & Tax (₹)', key: 'charges', width: 18 },
+    { header: 'MTF Interest @ 14.95% (₹)', key: 'interest', width: 22 },
+    { header: 'Net Realized P&L (₹)', key: 'netPl', width: 20 },
+    { header: 'Net Return (%)', key: 'netRoi', width: 15 },
+    { header: 'Decision / Notes', key: 'notes', width: 28 }
+  ];
+  applyHeaderStyle(wsMtf.getRow(1), 'FF581C87');
+
+  let mtfTotalCapital = 0;
+  let mtfTotalFunded = 0;
+  let mtfTotalPl = 0;
+  let mtfTotalCharges = 0;
+  let mtfTotalInterest = 0;
+
+  mtfTrades.forEach((t, idx) => {
+    const m = calculateTradeDetails(t);
+    const holdingDays = calcHoldingDays(m.buyDate, m.sellDate, m.status);
+
+    mtfTotalCapital += m.invested || 0;
+    mtfTotalFunded += m.mtfFundedAmount || 0;
+    mtfTotalCharges += m.charges || 0;
+    mtfTotalInterest += m.mtfInterest || 0;
+    if (m.returnsInr !== '' && m.returnsInr !== null) {
+      mtfTotalPl += m.returnsInr;
+    }
+
+    const rowData = {
+      id: t.id,
+      asset: t.assetName || 'Unknown',
+      entryDate: formatDateStr(m.buyDate),
+      avgBuyPrice: m.avgBuyPrice,
+      buyQty: m.totalBuyQty,
+      invested: m.invested,
+      funded: m.mtfFundedAmount,
+      exitDate: formatDateStr(m.sellDate),
+      avgSellPrice: m.avgSellPrice,
+      sellQty: m.totalSellQty,
+      status: m.status,
+      holdingDays: holdingDays,
+      charges: m.charges,
+      interest: m.mtfInterest,
+      netPl: m.returnsInr,
+      netRoi: m.returnsPercent !== '' ? `${m.returnsPercent}%` : '',
+      notes: t.notes || t.tradeDecision || 'MTF Trade'
+    };
+
+    const addedRow = wsMtf.addRow(rowData);
+    applyRowBorders(addedRow, idx % 2 === 1);
+
+    const plCell = addedRow.getCell('netPl');
+    const roiCell = addedRow.getCell('netRoi');
+
+    if (m.returnsInr !== '' && m.returnsInr !== null) {
+      if (m.returnsInr > 0) {
+        plCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFDF5' } };
+        plCell.font = { bold: true, color: { argb: 'FF15803D' } };
+        roiCell.font = { bold: true, color: { argb: 'FF15803D' } };
+      } else if (m.returnsInr < 0) {
+        plCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF1F2' } };
+        plCell.font = { bold: true, color: { argb: 'FFE11D48' } };
+        roiCell.font = { bold: true, color: { argb: 'FFE11D48' } };
+      }
+    }
+  });
+
+  const mtfTotalRow = wsMtf.addRow({
+    id: 'TOTALS',
+    asset: `Trades: ${mtfTrades.length}`,
+    entryDate: '—',
+    avgBuyPrice: '—',
+    buyQty: '—',
+    invested: Number(mtfTotalCapital.toFixed(2)),
+    funded: Number(mtfTotalFunded.toFixed(2)),
+    exitDate: '—',
+    avgSellPrice: '—',
+    sellQty: '—',
+    status: '—',
+    holdingDays: '—',
+    charges: Number(mtfTotalCharges.toFixed(2)),
+    interest: Number(mtfTotalInterest.toFixed(2)),
+    netPl: Number(mtfTotalPl.toFixed(2)),
+    netRoi: mtfTotalCapital > 0 ? ((mtfTotalPl / mtfTotalCapital) * 100).toFixed(2) + '%' : '0.00%',
+    notes: 'Aggregated MTF P&L'
+  });
+  applyTotalRowStyle(mtfTotalRow);
+  if (mtfTotalPl > 0) {
+    mtfTotalRow.getCell('netPl').font = { bold: true, color: { argb: 'FF15803D' } };
+  } else if (mtfTotalPl < 0) {
+    mtfTotalRow.getCell('netPl').font = { bold: true, color: { argb: 'FFE11D48' } };
+  }
+
+  applyAutoColWidths(wsMtf, 12, 40);
+
+  // -------------------------------------------------------------
+  // SHEET 4: Multi-Leg Execution History Breakdown
   // -------------------------------------------------------------
   const wsExecutions = workbook.addWorksheet('Execution Legs Breakdown', {
     views: [{ state: 'frozen', ySplit: 1, showGridLines: true }]
@@ -1122,7 +1260,7 @@ export const exportTradesToExcel = async (trades = []) => {
   applyAutoColWidths(wsExecutions, 12, 40);
 
   // -------------------------------------------------------------
-  // SHEET 4: Performance Summary Sheet
+  // SHEET 5: Performance Summary Sheet
   // -------------------------------------------------------------
   const wsSummary = workbook.addWorksheet('Performance Summary', {
     views: [{ state: 'frozen', ySplit: 1, showGridLines: true }]
@@ -1145,22 +1283,25 @@ export const exportTradesToExcel = async (trades = []) => {
     }
   });
 
-  const totalNetPl = stockTotalPl + intradayTotalPl;
-  const totalInvestedCapital = stockTotalCapital + intradayTotalCapital;
+  const totalNetPl = stockTotalPl + intradayTotalPl + mtfTotalPl;
+  const totalInvestedCapital = stockTotalCapital + intradayTotalCapital + mtfTotalCapital;
   const winRate = totalClosedTrades > 0 ? ((totalWinningTrades / totalClosedTrades) * 100).toFixed(1) + '%' : '0%';
 
   const summaryData = [
     { metric: 'Total Logged Trades', value: trades.length },
-    { metric: 'Stock / Swing Trades Count', value: stockTrades.length },
+    { metric: 'Stock / Delivery Trades Count', value: stockTrades.length },
     { metric: 'Intraday Trades Count', value: intradayTrades.length },
+    { metric: 'MTF Margin Trades Count', value: mtfTrades.length },
     { metric: 'Closed / Realized Trades', value: totalClosedTrades },
     { metric: 'Winning Trades Count', value: totalWinningTrades },
     { metric: 'Journal Win Rate (%)', value: winRate },
     { metric: 'Total Invested Capital (₹)', value: Number(totalInvestedCapital.toFixed(2)) },
     { metric: 'Realized Stock P&L (₹)', value: Number(stockTotalPl.toFixed(2)) },
     { metric: 'Realized Intraday P&L (₹)', value: Number(intradayTotalPl.toFixed(2)) },
+    { metric: 'Realized MTF P&L (₹)', value: Number(mtfTotalPl.toFixed(2)) },
     { metric: 'Total Net Trading P&L (₹)', value: Number(totalNetPl.toFixed(2)) },
-    { metric: 'Total Brokerage & Charges (₹)', value: Number((stockTotalCharges + intradayTotalCharges).toFixed(2)) }
+    { metric: 'Total MTF Interest Paid @ 14.95% (₹)', value: Number(mtfTotalInterest.toFixed(2)) },
+    { metric: 'Total Brokerage & Taxes (₹)', value: Number((stockTotalCharges + intradayTotalCharges + mtfTotalCharges).toFixed(2)) }
   ];
 
   summaryData.forEach((item, idx) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { ShieldAlert, X, AlertTriangle, KeyRound, CheckCircle2, Clock, Lock } from 'lucide-react';
@@ -23,6 +23,7 @@ export function PinVerificationModal({
     const saved = localStorage.getItem('antaryudh_secret_pin_lockout');
     return saved ? parseInt(saved, 10) || null : null;
   });
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [remainingTimeStr, setRemainingTimeStr] = useState('');
   const [isShake, setIsShake] = useState(false);
   const [isSuccessAnim, setIsSuccessAnim] = useState(false);
@@ -47,6 +48,7 @@ export function PinVerificationModal({
 
     const checkLockout = () => {
       const now = Date.now();
+      setCurrentTime(now);
       if (lockoutUntil && now < lockoutUntil) {
         const diff = lockoutUntil - now;
         const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -70,18 +72,15 @@ export function PinVerificationModal({
     return () => clearInterval(interval);
   }, [isOpen, lockoutUntil]);
 
-  // Reset and auto-focus input when modal opens
+  // Auto-focus input when modal opens
   useEffect(() => {
     if (isOpen) {
-      setPin('');
-      setErrorMsg('');
-      setIsSuccessAnim(false);
-      setIsShake(false);
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
         }
       }, 100);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
@@ -158,7 +157,7 @@ export function PinVerificationModal({
 
   if (!isOpen) return null;
 
-  const isLocked = Boolean(lockoutUntil && Date.now() < lockoutUntil);
+  const isLocked = Boolean(lockoutUntil && currentTime < lockoutUntil);
 
   // Render via createPortal directly into document.body so it is ALWAYS fixed to screen center
   return createPortal(

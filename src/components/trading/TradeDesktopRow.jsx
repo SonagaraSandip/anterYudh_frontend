@@ -1,4 +1,4 @@
-import React from 'react';
+import { memo } from 'react';
 import clsx from 'clsx';
 import {
   Clock,
@@ -9,7 +9,7 @@ import {
   Trash2
 } from 'lucide-react';
 
-export const TradeDesktopRow = React.memo(function TradeDesktopRow({
+export const TradeDesktopRow = memo(function TradeDesktopRow({
   trade,
   metrics,
   formatDate,
@@ -44,10 +44,16 @@ export const TradeDesktopRow = React.memo(function TradeDesktopRow({
 
   return (
     <tr className="hover:bg-slate-800/40 transition-colors group text-slate-200">
-      {/* Asset Name + Status Pill + Legs */}
+      {/* Asset Name + Status Pill + MTF Badge + Legs */}
       <td className="py-2.5 px-3.5 font-bold text-white sticky left-0 z-10 bg-slate-900 group-hover:bg-slate-850 border-r border-slate-800/80 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="tracking-tight text-white">{trade.assetName}</span>
+
+          {trade.tradeType === 'mtf' && (
+            <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+              MTF
+            </span>
+          )}
 
           {isFullyClosed ? (
             <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-500/30">
@@ -110,9 +116,16 @@ export const TradeDesktopRow = React.memo(function TradeDesktopRow({
         {formatCurrency(invested)}
       </td>
 
-      {/* Total Charges */}
-      <td className="py-2.5 px-2 font-mono text-right text-amber-400/90 border-r border-slate-800/60">
-        {charges > 0 ? formatCurrency(charges) : '₹0'}
+      {/* Total Charges + MTF Interest */}
+      <td className="py-2.5 px-2 font-mono text-right border-r border-slate-800/60">
+        <div className="flex flex-col items-end">
+          <span className="text-amber-400/90">{charges > 0 ? formatCurrency(charges) : '₹0'}</span>
+          {metrics.isMtf && metrics.mtfInterest > 0 && (
+            <span className="text-[9px] text-purple-300" title={`MTF Interest @ 14.95% p.a. for ${metrics.holdingDays} days`}>
+              +{formatCurrency(metrics.mtfInterest)} int
+            </span>
+          )}
+        </div>
       </td>
 
       {/* Trade Decision */}

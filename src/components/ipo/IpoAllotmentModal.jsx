@@ -1,22 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
-  TrendingUp,
-  TrendingDown,
   Layers,
   Coins,
   Receipt,
   Plus,
   Trash2,
-  Calendar,
   CheckCircle2,
   Split,
-  Calculator,
-  ArrowRight
+  Calculator
 } from 'lucide-react';
 import clsx from 'clsx';
-import { calculateIpoCharges, calculateApplicationMetrics } from '../../utils/ipoCalculator';
+import { calculateIpoCharges } from '../../utils/ipoCalculator';
 
 export function IpoAllotmentModal({
   isOpen,
@@ -26,9 +22,7 @@ export function IpoAllotmentModal({
   application,
   onSaveAllotment
 }) {
-  if (!isOpen || !ipo || !personName) return null;
-
-  const lotCost = parseFloat(ipo.lotCost) || 0;
+  const lotCost = parseFloat(ipo?.lotCost) || 0;
   const initialApp = application || {};
 
   // Mode: 'simple' (Single full/standard exit) | 'multileg' (Multiple partial sell tranches)
@@ -103,6 +97,12 @@ export function IpoAllotmentModal({
     if (sharesNum > 0 && priceNum > 0) {
       setTotalLotCostInput(String(Math.round(sharesNum * priceNum * 100) / 100));
     }
+    if (mode === 'simple' && isExited && sellPrice) {
+      const sp = parseFloat(sellPrice) || 0;
+      if (sharesNum > 0 && sp > 0) {
+        setSimpleCharges(String(calculateIpoCharges(sharesNum, sp, false)));
+      }
+    }
   };
 
   const handlePriceChange = (val) => {
@@ -123,17 +123,25 @@ export function IpoAllotmentModal({
     }
   };
 
-  // Auto-calculate charges for simple exit when shares or sell price change
-  useEffect(() => {
-    if (mode === 'simple' && isExited && sellPrice) {
+  const handleSellPriceChange = (val) => {
+    setSellPrice(val);
+    const sp = parseFloat(val) || 0;
+    const q = parseInt(allottedShares, 10) || 0;
+    if (q > 0 && sp > 0) {
+      setSimpleCharges(String(calculateIpoCharges(q, sp, false)));
+    }
+  };
+
+  const handleExitedToggle = (checked) => {
+    setIsExited(checked);
+    if (checked && !simpleCharges) {
       const q = parseInt(allottedShares, 10) || 0;
       const sp = parseFloat(sellPrice) || 0;
       if (q > 0 && sp > 0) {
-        const auto = calculateIpoCharges(q, sp, false);
-        setSimpleCharges(String(auto));
+        setSimpleCharges(String(calculateIpoCharges(q, sp, false)));
       }
     }
-  }, [allottedShares, sellPrice, isExited, mode]);
+  };
 
   // Derived Values
   const sharesNum = parseInt(allottedShares, 10) || 0;
@@ -303,6 +311,8 @@ export function IpoAllotmentModal({
     }
   };
 
+  if (!isOpen || !ipo || !personName) return null;
+
   return createPortal(
     <div
       onClick={(e) => {
@@ -461,7 +471,7 @@ export function IpoAllotmentModal({
                   <input
                     type="checkbox"
                     checked={isExited}
-                    onChange={(e) => setIsExited(e.target.checked)}
+                    onChange={(e) => handleExitedToggle(e.target.checked)}
                     className="w-4 h-4 rounded text-emerald-600 bg-slate-900 border-slate-700 accent-emerald-500 cursor-pointer"
                   />
                   <span className="text-xs sm:text-sm font-semibold text-slate-200">
@@ -488,7 +498,7 @@ export function IpoAllotmentModal({
                       required={isExited}
                       placeholder="e.g. 450"
                       value={sellPrice}
-                      onChange={(e) => setSellPrice(e.target.value)}
+                      onChange={(e) => handleSellPriceChange(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-emerald-500 transition"
                     />
                   </div>

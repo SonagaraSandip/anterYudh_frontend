@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import {
@@ -7,7 +7,6 @@ import {
   ChevronUp,
   ChevronDown,
   Lock,
-  Unlock,
   Check,
   ArrowUpToLine,
   ArrowDownToLine,
@@ -21,16 +20,16 @@ export function ReorderPersonsModal({
   onSaveOrder,
   onClose
 }) {
-  const [orderedList, setOrderedList] = useState([]);
+  const [orderedList, setOrderedList] = useState(() => Array.isArray(persons) ? [...persons] : []);
   const [draggedIdx, setDraggedIdx] = useState(null);
   const [hasSaved, setHasSaved] = useState(false);
+  const [prevPersons, setPrevPersons] = useState(persons);
 
-  useEffect(() => {
-    if (isOpen) {
-      setOrderedList([...persons]);
-      setHasSaved(false);
-    }
-  }, [isOpen, persons]);
+  if (persons !== prevPersons) {
+    setPrevPersons(persons);
+    setOrderedList(Array.isArray(persons) ? [...persons] : []);
+    setHasSaved(false);
+  }
 
   // Lock body scroll and handle Escape key when modal is open
   useEffect(() => {

@@ -1,31 +1,28 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { useState, useEffect, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import {
   LayoutDashboard,
   TrendingUp,
   BarChart2,
-  CreditCard,
-  ShoppingBag,
   Shield,
   Menu,
   X,
   ChevronRight,
   ArrowUp,
   Database,
-  RefreshCw,
-  Zap,
   FileText,
   Lock,
   Loader2,
   Sparkles,
   Download,
-  Smartphone
+  Cloud,
+  CreditCard
 } from 'lucide-react';
 import axios from 'axios';
-import { Cloud } from 'lucide-react';
 import MainDashboard from './components/MainDashboard';
 import SecurityLockScreen from './components/SecurityLockScreen';
 import BackupModal from './components/BackupModal';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Lazy load heavyweight tab components so only Dashboard is loaded on initial render
 const IpoDashboard = lazy(() => import('./components/IpoDashboard'));
@@ -234,9 +231,18 @@ function App() {
     }
   };
 
-  // Run DB connection check immediately in parallel while user enters password
+  // Run DB connection check and trigger smart auto-backup check immediately in parallel
   useEffect(() => {
     checkDbConnection();
+
+    // Trigger smart catch-up daily auto backup check in the background (silent & non-blocking)
+    axios.post('/api/backup/auto-check').catch(() => {});
+
+    const handleOnline = () => {
+      axios.post('/api/backup/auto-check').catch(() => {});
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
   }, []);
 
   // Lock background scroll when mobile sidebar drawer is open
@@ -484,19 +490,21 @@ function App() {
 
       {/* Main Tab Content View Container (Lazy Loaded with Suspense for Maximum Speed) */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-6">
-        <Suspense fallback={<TabLoadingFallback />}>
-          {activeTab === 'dashboard' && (
-            <MainDashboard
-              onNavigateTab={(tab) => handleSelectTab(tab)}
-              onOpenBackup={() => setIsBackupModalOpen(true)}
-            />
-          )}
-          {activeTab === 'ipo' && <IpoDashboard isEmbedded={true} />}
-          {activeTab === 'trading' && <TradingView />}
-          {activeTab === 'expenses' && <ExpensesView />}
-          {(activeTab === 'notes' || activeTab === 'buy') && <NotesView />}
-          {activeTab === 'growth' && <GrowthView />}
-        </Suspense>
+        <ErrorBoundary key={activeTab} onReset={() => setActiveTab('dashboard')}>
+          <Suspense fallback={<TabLoadingFallback />}>
+            {activeTab === 'dashboard' && (
+              <MainDashboard
+                onNavigateTab={(tab) => handleSelectTab(tab)}
+                onOpenBackup={() => setIsBackupModalOpen(true)}
+              />
+            )}
+            {activeTab === 'ipo' && <IpoDashboard isEmbedded={true} />}
+            {activeTab === 'trading' && <TradingView />}
+            {activeTab === 'expenses' && <ExpensesView />}
+            {(activeTab === 'notes' || activeTab === 'buy') && <NotesView />}
+            {activeTab === 'growth' && <GrowthView />}
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
       {/* Backup & Cloud Sync Modal */}

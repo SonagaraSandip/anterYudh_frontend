@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import cacheManager from '../utils/cacheManager';
@@ -16,19 +16,13 @@ import {
   Edit2,
   Trash2,
   X,
-  TrendingUp,
-  Bookmark,
-  Layers,
-  ChevronRight,
   Filter,
   Check,
-  AlertCircle,
-  FileText,
-  Target,
   Award,
   Zap,
-  Tag,
-  BookMarked
+  Layers,
+  BookMarked,
+  AlertCircle
 } from 'lucide-react';
 
 const SKILL_CATEGORIES = [
@@ -81,6 +75,7 @@ export default function GrowthView() {
   const [editingBook, setEditingBook] = useState(null);
 
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { type: 'skill' | 'book', id, title }
+  const [mobileActiveView, setMobileActiveView] = useState('all');
 
   // Fetch live Skills & Books
   const fetchData = async () => {
@@ -231,8 +226,6 @@ export default function GrowthView() {
     return { total, reading, completed, wantToRead };
   }, [books]);
 
-  // Mobile View Switcher ('all' | 'skills' | 'books')
-  const [mobileActiveView, setMobileActiveView] = useState('all');
 
   return (
     <div className="space-y-3 sm:space-y-5 animate-fadeIn font-sans max-w-full overflow-hidden">

@@ -1,12 +1,12 @@
-import React from 'react';
-import { Users, Edit2, ChevronDown, Trash2, Calendar, CheckCircle2, Split, Layers, Coins } from 'lucide-react';
+import { memo } from 'react';
+import { Users, Edit2, ChevronDown, Trash2, Calendar, CheckCircle2, Split } from 'lucide-react';
 import clsx from 'clsx';
 import { calculateApplicationMetrics, calculateIpoMetrics } from '../../utils/ipoCalculator';
 
 const isSamePerson = (p1, p2) =>
   String(p1 || '').trim().toLowerCase() === String(p2 || '').trim().toLowerCase();
 
-export const IpoMobileCard = React.memo(function IpoMobileCard({
+export const IpoMobileCard = memo(function IpoMobileCard({
   ipo,
   persons,
   isExpanded,

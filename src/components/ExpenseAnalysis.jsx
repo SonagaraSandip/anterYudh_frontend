@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import clsx from 'clsx';
 import {
   ArrowLeft,
@@ -13,38 +13,25 @@ import {
   Target,
   Shield,
   Clock,
-  Receipt,
-  Award,
-  AlertTriangle,
   CheckCircle2,
-  XCircle,
-  HelpCircle,
-  Percent,
-  DollarSign,
-  Flame,
-  Scale,
   Sparkles,
-  Search,
-  X,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  SlidersHorizontal,
   ArrowUpRight,
   ArrowDownLeft,
   RotateCcw,
-  CalendarDays,
   Wallet,
   CreditCard,
-  Building,
-  Briefcase,
-  ArrowRightLeft,
-  Tag,
-  Gift,
   ShoppingBag,
-  Home,
-  Coffee,
-  Coins
+  Receipt,
+  SlidersHorizontal,
+  ChevronUp,
+  ChevronDown,
+  Search,
+  X,
+  Coins,
+  Flame,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function ExpenseAnalysis({ transactions = [], onBack }) {
@@ -1175,7 +1162,7 @@ export default function ExpenseAnalysis({ transactions = [], onBack }) {
                 </tr>
               ) : (
                 monthlyPnlList.map((m) => (
-                  <React.Fragment key={m.monthKey}>
+                  <Fragment key={m.monthKey}>
                     <tr className="hover:bg-slate-800/40 transition">
                       <td className="py-3 px-3 font-sans font-bold text-white whitespace-nowrap">
                         {m.monthLabel}
@@ -1211,21 +1198,28 @@ export default function ExpenseAnalysis({ transactions = [], onBack }) {
                       </td>
                       <td className="py-3 px-3 text-center whitespace-nowrap font-sans">
                         {m.isSurplus ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                            <CheckCircle2 className="w-3 h-3" /> Surplus
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                            Surplus
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full">
-                            <XCircle className="w-3 h-3" /> Deficit
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                            Deficit
                           </span>
                         )}
                       </td>
                       <td className="py-3 px-3 text-center whitespace-nowrap">
                         <button
+                          type="button"
                           onClick={() => setExpandedMonthKey(expandedMonthKey === m.monthKey ? null : m.monthKey)}
-                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 font-sans text-[11px] font-bold transition"
+                          className={clsx(
+                            'px-2 py-1 rounded text-[11px] font-sans font-bold transition flex items-center gap-1 mx-auto',
+                            expandedMonthKey === m.monthKey
+                              ? 'bg-indigo-600 text-white shadow-sm'
+                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          )}
                         >
-                          {expandedMonthKey === m.monthKey ? 'Hide' : 'Details'}
+                          <span>{expandedMonthKey === m.monthKey ? 'Hide' : 'View'}</span>
+                          {expandedMonthKey === m.monthKey ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                         </button>
                       </td>
                     </tr>
@@ -1276,7 +1270,7 @@ export default function ExpenseAnalysis({ transactions = [], onBack }) {
                         </td>
                       </tr>
                     )}
-                  </React.Fragment>
+                  </Fragment>
                 ))
               )}
             </tbody>

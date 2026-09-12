@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import cacheManager from '../utils/cacheManager';
@@ -7,26 +7,25 @@ import {
   UserPlus,
   TrendingUp,
   TrendingDown,
-  Layers,
   Search,
   Filter,
   CheckCircle2,
   Trash2,
-  RefreshCw,
   Edit2,
   FileSpreadsheet,
-  AlertCircle,
-  AlertTriangle,
   X,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
   ChevronUp,
-  Smartphone,
-  Calendar,
   Users,
   Download,
-  ArrowUpDown
+  ArrowUpDown,
+  RefreshCw,
+  AlertCircle,
+  AlertTriangle,
+  Layers,
+  Smartphone
 } from 'lucide-react';
 import { exportIposToExcel } from '../utils/excelExporter';
 import { IpoDesktopRow } from './ipo/IpoDesktopRow';
@@ -34,11 +33,10 @@ import { IpoMobileCard } from './ipo/IpoMobileCard';
 import { ReorderPersonsModal } from './ipo/ReorderPersonsModal';
 import { IpoAllotmentModal } from './ipo/IpoAllotmentModal';
 import { IpoQuickPartialSellModal } from './ipo/IpoQuickPartialSellModal';
-import { calculateIpoMetrics, calculateApplicationMetrics } from '../utils/ipoCalculator';
+import { calculateIpoMetrics } from '../utils/ipoCalculator';
 
 const API_BASE = '/api/ipos';
 
-// Helper for case-insensitive and whitespace-safe person comparison
 const isSamePerson = (p1, p2) =>
   String(p1 || '').trim().toLowerCase() === String(p2 || '').trim().toLowerCase();
 
@@ -53,6 +51,20 @@ export default function IpoDashboard({ isEmbedded = false }) {
       return [];
     }
   });
+
+  // Synchronized state updater that instantly updates React state, memory cache, and localStorage in 1 atomic step
+  const updateIpos = (updater) => {
+    setIpos((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (Array.isArray(next)) {
+        cacheManager.set('ipos_list', next, 120000);
+        try {
+          localStorage.setItem('antaryudh_ipo_data', JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
+  };
   const [persons, setPersons] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('antaryudh_demat_persons') || '[]');
@@ -148,9 +160,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
             allotted: Boolean(app.allotted)
           }))
         }));
-        setIpos(cleanIpos);
-        cacheManager.set('ipos_list', cleanIpos, 120000);
-        localStorage.setItem('antaryudh_ipo_data', JSON.stringify(cleanIpos));
+        updateIpos(cleanIpos);
 
         // Extract and combine unique person names (case-insensitive deduplication)
         let savedPersons = [];
@@ -183,7 +193,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
         setPersons(combinedList);
         localStorage.setItem('antaryudh_demat_persons', JSON.stringify(combinedList));
       } else {
-        setIpos([]);
+        updateIpos([]);
       }
     } catch (err) {
       console.warn('Backend /api/ipos not reachable:', err.message);
@@ -244,7 +254,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
 
   // Sync Person List across all local IPOs
   const ensurePersonAcrossIpos = (personName) => {
-    setIpos((prevIpos) =>
+    updateIpos((prevIpos) =>
       prevIpos.map((ipo) => {
         const hasPerson = (ipo.applications || []).some((a) => isSamePerson(a.personName, personName));
         if (!hasPerson) {
@@ -316,7 +326,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
       localStorage.setItem('antaryudh_demat_persons', JSON.stringify(updatedPersons));
     } catch {}
 
-    setIpos((prev) =>
+    updateIpos((prev) =>
       prev.map((ipo) => ({
         ...ipo,
         applications: (ipo.applications || []).filter(
@@ -333,7 +343,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
       console.error('Failed to delete person on backend:', err);
       // Rollback on failure
       setPersons(prevPersons);
-      setIpos(prevIpos);
+      updateIpos(prevIpos);
       try {
         localStorage.setItem('antaryudh_demat_persons', JSON.stringify(prevPersons));
       } catch {}
@@ -386,7 +396,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
     };
 
     // 2. Optimistic UI update
-    setIpos((prevIpos) =>
+    updateIpos((prevIpos) =>
       prevIpos.map((ipo) => {
         if (ipo.id !== ipoId) return ipo;
 
@@ -419,7 +429,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
       });
 
       if (res.data) {
-        setIpos((prevIpos) =>
+        updateIpos((prevIpos) =>
           prevIpos.map((ipo) => {
             if (ipo.id !== ipoId) return ipo;
             const apps = (ipo.applications || []).map((a) =>
@@ -440,7 +450,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
       console.error('Failed to update application on backend:', err);
       // Rollback on failure
       if (targetIpo) {
-        setIpos((prevIpos) =>
+        updateIpos((prevIpos) =>
           prevIpos.map((ipo) => (ipo.id === ipoId ? targetIpo : ipo))
         );
       }
@@ -468,7 +478,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
     const computedLotCost = shares > 0 && price > 0 ? Math.round(shares * price * 100) / 100 : 0;
 
     // 1. Optimistic Update
-    setIpos((prev) =>
+    updateIpos((prev) =>
       prev.map((i) => {
         if (i.id !== ipoId) return i;
         const apps = [...(i.applications || [])];
@@ -528,7 +538,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
       }
 
       if (res.data) {
-        setIpos((prev) =>
+        updateIpos((prev) =>
           prev.map((i) => {
             if (i.id !== ipoId) return i;
             const apps = (i.applications || []).map((a) =>
@@ -562,7 +572,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
         partialSellData
       );
       if (res.data) {
-        setIpos((prev) =>
+        updateIpos((prev) =>
           prev.map((i) => {
             if (i.id !== ipoId) return i;
             const apps = (i.applications || []).map((a) =>
@@ -603,7 +613,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
     );
 
     // 1. Optimistic update
-    setIpos((prevIpos) =>
+    updateIpos((prevIpos) =>
       prevIpos.map((ipo) => {
         if (ipo.id !== ipoId) return ipo;
         const apps = (ipo.applications || []).map((a) => {
@@ -639,7 +649,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
   // Save edited Lot Cost to backend
   const handleSaveLotCost = async (ipoId) => {
     const val = parseFloat(lotCostInput) || 0;
-    setIpos((prev) =>
+    updateIpos((prev) =>
       prev.map((ipo) => (ipo.id === ipoId ? { ...ipo, lotCost: val } : ipo))
     );
     setEditingLotCostId(null);
@@ -662,7 +672,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
   // Save edited Profit / Loss to backend
   const handleSaveProfitLoss = async (ipoId) => {
     const val = parseFloat(profitLossInput) || 0;
-    setIpos((prev) =>
+    updateIpos((prev) =>
       prev.map((ipo) => (ipo.id === ipoId ? { ...ipo, profitLoss: val } : ipo))
     );
     setEditingProfitLossId(null);
@@ -699,7 +709,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
 
       const response = await axios.post(API_BASE, payload);
       if (response.data) {
-        setIpos([response.data, ...ipos]);
+        updateIpos((prev) => [response.data, ...prev]);
       } else {
         await fetchIpos();
       }
@@ -726,13 +736,13 @@ export default function IpoDashboard({ isEmbedded = false }) {
     if (!window.confirm('Are you sure you want to delete this IPO entry?')) return;
 
     const prevList = [...ipos];
-    setIpos(ipos.filter((i) => i.id !== ipoId));
+    updateIpos((prev) => prev.filter((i) => i.id !== ipoId));
 
     try {
       await axios.delete(`${API_BASE}/${ipoId}`);
     } catch (err) {
       console.error('Failed to delete IPO:', err);
-      setIpos(prevList);
+      updateIpos(prevList);
     }
   };
 

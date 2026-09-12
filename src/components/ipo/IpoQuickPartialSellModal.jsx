@@ -1,13 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
-  TrendingUp,
-  Coins,
-  Receipt,
   CheckCircle2,
-  Calendar,
-  Calculator,
   Split
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -21,11 +16,9 @@ export function IpoQuickPartialSellModal({
   application,
   onSubmitPartialSell
 }) {
-  if (!isOpen || !ipo || !personName) return null;
-
   const metrics = calculateApplicationMetrics(application, ipo);
   const remainingShares = metrics?.remainingShares > 0 ? metrics.remainingShares : 1;
-  const avgBuyPrice = metrics?.allottedPrice || (parseFloat(ipo.lotCost) || 0);
+  const avgBuyPrice = metrics?.allottedPrice || (parseFloat(ipo?.lotCost) || 0);
 
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [quantity, setQuantity] = useState(() => String(remainingShares));
@@ -34,21 +27,29 @@ export function IpoQuickPartialSellModal({
   });
   const [charges, setCharges] = useState(() => {
     const q = remainingShares;
-    const p = parseFloat(price) || avgBuyPrice || 0;
+    const p = parseFloat(application?.sellPrice) || avgBuyPrice || 0;
     return p > 0 ? String(calculateIpoCharges(q, p, false)) : '20';
   });
   const [notes, setNotes] = useState('Partial Exit');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Auto-calculate statutory charges on quantity/price changes
-  useEffect(() => {
-    const q = parseInt(quantity, 10) || 0;
+  const handleQuantityChange = (val) => {
+    setQuantity(val);
+    const q = parseInt(val, 10) || 0;
     const p = parseFloat(price) || 0;
     if (q > 0 && p > 0) {
-      const autoChg = calculateIpoCharges(q, p, false);
-      setCharges(String(autoChg));
+      setCharges(String(calculateIpoCharges(q, p, false)));
     }
-  }, [quantity, price]);
+  };
+
+  const handlePriceChange = (val) => {
+    setPrice(val);
+    const q = parseInt(quantity, 10) || 0;
+    const p = parseFloat(val) || 0;
+    if (q > 0 && p > 0) {
+      setCharges(String(calculateIpoCharges(q, p, false)));
+    }
+  };
 
   // Real-time calculations
   const qtyNum = parseInt(quantity, 10) || 0;
@@ -89,6 +90,8 @@ export function IpoQuickPartialSellModal({
       setIsSubmitting(false);
     }
   };
+
+  if (!isOpen || !ipo || !personName) return null;
 
   return createPortal(
     <div
@@ -155,7 +158,7 @@ export function IpoQuickPartialSellModal({
                 </label>
                 <button
                   type="button"
-                  onClick={() => setQuantity(String(remainingShares))}
+                  onClick={() => handleQuantityChange(String(remainingShares))}
                   className="text-[10px] text-indigo-400 hover:text-indigo-300 font-medium active:scale-95"
                 >
                   Max ({remainingShares})
@@ -168,7 +171,7 @@ export function IpoQuickPartialSellModal({
                 step="1"
                 required
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onChange={(e) => handleQuantityChange(e.target.value)}
                 placeholder="e.g. 25"
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-emerald-500 transition"
               />
@@ -188,7 +191,7 @@ export function IpoQuickPartialSellModal({
                 required
                 autoFocus
                 value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                onChange={(e) => handlePriceChange(e.target.value)}
                 placeholder="e.g. 480"
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-emerald-500 transition"
               />

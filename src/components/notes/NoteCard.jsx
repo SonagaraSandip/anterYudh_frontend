@@ -1,8 +1,8 @@
-import React from 'react';
+import { memo } from 'react';
 import clsx from 'clsx';
 import { Lock, Pin, Eye, EyeOff, Check, Copy, Edit3, Trash2 } from 'lucide-react';
 
-export const NoteCard = React.memo(function NoteCard({
+export const NoteCard = memo(function NoteCard({
   note,
   colorConfig,
   isRevealed,

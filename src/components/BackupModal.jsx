@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import {
@@ -11,14 +11,10 @@ import {
   Clock,
   Download,
   HardDrive,
-  ShieldCheck,
   X,
   FileArchive,
-  ArrowDownCircle,
-  Calendar,
   Sparkles,
-  Check,
-  RotateCcw
+  ShieldCheck
 } from 'lucide-react';
 
 export default function BackupModal({ isOpen, onClose }) {
@@ -27,8 +23,6 @@ export default function BackupModal({ isOpen, onClose }) {
   const [status, setStatus] = useState(null);
   const [backups, setBackups] = useState({ localBackups: [], driveBackups: [], database: '' });
   const [feedback, setFeedback] = useState(null);
-  const [restoringFile, setRestoringFile] = useState(null);
-  const [confirmRestore, setConfirmRestore] = useState(null);
 
   // Lock background body scroll and listen for ESC key
   useEffect(() => {
@@ -76,7 +70,6 @@ export default function BackupModal({ isOpen, onClose }) {
     if (isOpen) {
       fetchBackupData();
       setFeedback(null);
-      setConfirmRestore(null);
     }
   }, [isOpen]);
 
@@ -121,81 +114,102 @@ export default function BackupModal({ isOpen, onClose }) {
 
   return typeof document !== 'undefined' && createPortal(
     <div 
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn overflow-y-auto"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto"
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
+      onClick={onClose}
     >
+      {/* Semi-transparent backdrop blur */}
       <div 
-        className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] my-auto relative z-[100000]"
+        className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm animate-fadeIn" 
+        aria-hidden="true" 
+      />
+
+      {/* Centered Modal Dialog Card */}
+      <div 
+        className="relative w-full max-w-2xl bg-slate-900 border border-slate-800/90 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88dvh] sm:max-h-[85vh] my-auto z-10 animate-scaleUp"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-800/80 bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-              <Cloud className="w-5 h-5" />
+        <div className="p-3.5 sm:p-5 border-b border-slate-800/80 bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 shrink-0">
+              <Cloud className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base md:text-lg font-bold text-white tracking-tight truncate">
                   Database Backup & Cloud Sync
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  {status?.database || 'MySQL'}
+                <span className="px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  {status?.database || 'antarYudh_Prod'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
-                Automated daily midnight dumps + one-click Google Drive sync
+              <p className="text-[11px] sm:text-xs text-slate-400 truncate">
+                Automated daily dumps (morning first-open & midnight) + Google Drive sync
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition shrink-0 cursor-pointer active:scale-95"
+            aria-label="Close modal"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="p-4 sm:p-5 space-y-4 sm:space-y-5 overflow-y-auto flex-1">
-          {/* Status Alert Banner */}
+        {/* Content Body (Scrollable) */}
+        <div className="p-3.5 sm:p-5 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
+          {/* Active Auto Backup Running Indicator */}
+          {status?.isAutoBackupRunning && (
+            <div className="p-3 rounded-xl bg-indigo-500/15 border border-indigo-500/40 text-indigo-300 text-xs font-medium flex items-center gap-2.5 animate-pulse">
+              <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />
+              <div className="flex-1 min-w-0">
+                <strong className="block text-xs text-white">Smart Daily Auto-Backup is running in background...</strong>
+                <p className="text-[10px] sm:text-[11px] text-indigo-300/80 truncate">
+                  Dumping database records and uploading today's catch-up archive to Google Drive.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Feedback / Alert Banner */}
           {feedback && (
             <div
-              className={`p-3 rounded-xl border text-xs sm:text-sm font-medium flex items-center gap-2.5 animate-fadeIn ${
+              className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2.5 animate-fadeIn ${
                 feedback.type === 'success'
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : feedback.type === 'warning'
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
                   : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
               }`}
             >
               {feedback.type === 'success' ? (
                 <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
               ) : (
-                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
               )}
-              <span className="flex-1">{feedback.message}</span>
+              <span className="flex-1 text-[11px] sm:text-xs">{feedback.message}</span>
               <button
                 onClick={() => setFeedback(null)}
-                className="text-slate-400 hover:text-white text-xs"
+                className="text-slate-400 hover:text-white text-xs underline cursor-pointer shrink-0"
               >
                 Dismiss
               </button>
             </div>
           )}
 
-          {/* Last Backup Highlight Banner */}
-          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3">
+          {/* Last Backup Highlight Card */}
+          <div className="p-3 sm:p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="p-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
                 <Clock className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
+                <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">
                   Last Backup Taken
                 </div>
-                <div className="text-sm font-bold text-white font-mono truncate">
+                <div className="text-xs sm:text-sm font-bold text-white font-mono truncate">
                   {status?.lastBackupTime ? (
                     new Date(status.lastBackupTime).toLocaleString([], {
                       year: 'numeric',
@@ -213,61 +227,61 @@ export default function BackupModal({ isOpen, onClose }) {
             </div>
 
             {status?.lastBackupTime && (
-              <span className="text-[10px] px-2.5 py-1 rounded-full font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+              <span className="text-[9px] sm:text-[10px] px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
                 {status?.lastBackupSource || 'Active'}
               </span>
             )}
           </div>
 
-          {/* Configuration & Cron Overview Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Configuration Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
             {/* Auto Schedule Card */}
-            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-2">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5 sm:space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                <span className="text-[11px] sm:text-xs font-semibold text-slate-400 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-indigo-400" />
                   Auto Daily Backup
                 </span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono ${status?.isAutoBackupEnabled ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                <span className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold font-mono ${status?.isAutoBackupEnabled ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'}`}>
                   {status?.isAutoBackupEnabled ? 'ENABLED' : 'DISABLED'}
                 </span>
               </div>
-              <div className="text-sm font-bold text-white font-mono">
-                {status?.schedule || 'Every day at 00:00 (Midnight)'}
+              <div className="text-xs sm:text-sm font-bold text-white font-mono">
+                {status?.schedule || 'Smart Daily (Morning & Midnight)'}
               </div>
-              <div className="text-[11px] text-slate-500">
+              <div className="text-[10px] sm:text-[11px] text-slate-500">
                 Retention window: {status?.retentionDays || 30} days
               </div>
             </div>
 
             {/* Google Drive Status Card */}
-            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-2">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5 sm:space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                <span className="text-[11px] sm:text-xs font-semibold text-slate-400 flex items-center gap-1.5">
                   <CloudUpload className="w-3.5 h-3.5 text-cyan-400" />
                   Google Drive Target
                 </span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono ${status?.isConfigured ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30' : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'}`}>
+                <span className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold font-mono ${status?.isConfigured ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30' : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'}`}>
                   {status?.isConfigured ? 'CONNECTED' : 'LOCAL ONLY'}
                 </span>
               </div>
-              <div className="text-sm font-bold text-white truncate font-mono">
+              <div className="text-xs sm:text-sm font-bold text-white truncate font-mono">
                 {status?.hasFolderId ? 'Folder Linked' : 'Folder ID Needed'}
               </div>
-              <div className="text-[11px] text-slate-500 truncate">
+              <div className="text-[10px] sm:text-[11px] text-slate-500 truncate">
                 {status?.hasOAuth ? 'OAuth Active' : (status?.hasInlineKey || status?.hasKeyPath ? 'Service Account Active' : 'Credentials Needed')}
               </div>
             </div>
           </div>
 
-          {/* Trigger Backup Action Button */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-slate-950 border border-indigo-500/20 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="space-y-0.5 text-center sm:text-left">
-              <div className="text-xs sm:text-sm font-bold text-white flex items-center justify-center sm:justify-start gap-1.5">
-                <Sparkles className="w-4 h-4 text-indigo-400" />
-                Manual On-Demand Backup
+          {/* Trigger Backup Action Banner */}
+          <div className="p-3.5 sm:p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-slate-950 border border-indigo-500/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="space-y-0.5 text-left">
+              <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span>Manual On-Demand Backup</span>
               </div>
-              <div className="text-[11px] text-slate-400">
+              <div className="text-[10px] sm:text-[11px] text-slate-400">
                 Instantly dumps all schemas, table records, and syncs compressed archive
               </div>
             </div>
@@ -291,26 +305,25 @@ export default function BackupModal({ isOpen, onClose }) {
             </button>
           </div>
 
-          {/* Recent Archives List (Local + Drive + DB Logs) */}
-          <div className="space-y-2.5">
+          {/* Recent Archives List */}
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
+              <h4 className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
                 <FileArchive className="w-3.5 h-3.5 text-indigo-400" />
                 Backup Archives History
               </h4>
               <button
                 onClick={fetchBackupData}
                 disabled={loading}
-                className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 transition"
+                className="text-[10px] sm:text-[11px] text-slate-400 hover:text-white flex items-center gap-1 transition cursor-pointer"
               >
                 <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
             </div>
 
-            <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800/80 bg-slate-950/40 max-h-56 overflow-y-auto">
+            <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800/80 bg-slate-950/40 max-h-48 sm:max-h-56 overflow-y-auto">
               {(() => {
-                // Combine and deduplicate drive backups, local backups, and db logs
                 const items = [];
                 const seen = new Set();
 
@@ -357,29 +370,28 @@ export default function BackupModal({ isOpen, onClose }) {
                   }
                 });
 
-                // Sort by createdAt descending
                 items.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
                 if (items.length === 0) {
                   return (
-                    <div className="p-6 text-center text-xs text-slate-500">
+                    <div className="p-5 text-center text-xs text-slate-500">
                       No backup archives found yet. Click "Backup Database Now" above to create your first archive.
                     </div>
                   );
                 }
 
                 return items.map((b, idx) => (
-                  <div key={b.name || idx} className="p-2.5 sm:p-3 flex items-center justify-between gap-2 hover:bg-slate-800/30 transition text-xs">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                  <div key={b.name || idx} className="p-2 sm:p-2.5 flex items-center justify-between gap-2 hover:bg-slate-800/30 transition text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
                       <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
                         <FileArchive className="w-3.5 h-3.5" />
                       </div>
                       <div className="min-w-0">
-                        <div className="font-mono text-slate-200 font-semibold truncate text-[11px] sm:text-xs">
+                        <div className="font-mono text-slate-200 font-semibold truncate text-[10px] sm:text-xs max-w-[180px] sm:max-w-xs md:max-w-sm">
                           {b.name}
                         </div>
-                        <div className="text-[10px] text-slate-500 flex items-center gap-2">
-                          <span>{b.createdAt ? new Date(b.createdAt).toLocaleString() : 'Recent'}</span>
+                        <div className="text-[9px] sm:text-[10px] text-slate-500 flex items-center gap-1.5 truncate">
+                          <span>{b.createdAt ? new Date(b.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Recent'}</span>
                           {b.sizeKB && (
                             <>
                               <span>•</span>
@@ -390,8 +402,8 @@ export default function BackupModal({ isOpen, onClose }) {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-mono border ${b.badgeClass}`}>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded-md font-mono border ${b.badgeClass}`}>
                         {b.source}
                       </span>
                       {b.link && (
@@ -414,14 +426,14 @@ export default function BackupModal({ isOpen, onClose }) {
         </div>
 
         {/* Footer */}
-        <div className="p-3 sm:p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-500">
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+        <div className="p-3 sm:p-4 border-t border-slate-800 bg-slate-950/70 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 shrink-0">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>Encrypted local storage with SSL cloud tunnel</span>
           </div>
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium transition text-xs"
+            className="w-full sm:w-auto px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold transition text-xs cursor-pointer active:scale-95"
           >
             Close
           </button>

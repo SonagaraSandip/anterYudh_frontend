@@ -18,16 +18,26 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('react-dom')) {
-              return 'vendor-react';
-            }
-            if (id.includes('lucide-react')) {
+            if (id.includes('/node_modules/lucide-react/') || id.includes('\\node_modules\\lucide-react\\')) {
               return 'vendor-icons';
             }
-            if (id.includes('axios')) {
+            if (
+              id.includes('/node_modules/react/') ||
+              id.includes('\\node_modules\\react\\') ||
+              id.includes('/node_modules/react-dom/') ||
+              id.includes('\\node_modules\\react-dom\\') ||
+              id.includes('/node_modules/scheduler/') ||
+              id.includes('\\node_modules\\scheduler\\')
+            ) {
+              return 'vendor-react';
+            }
+            if (id.includes('/node_modules/axios/') || id.includes('\\node_modules\\axios\\')) {
               return 'vendor-axios';
             }
-            if (id.includes('exceljs') || id.includes('file-saver')) {
+            if (
+              id.includes('exceljs') ||
+              id.includes('file-saver')
+            ) {
               return 'vendor-exceljs';
             }
             return 'vendor-libs';

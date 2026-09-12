@@ -1,7 +1,7 @@
-import React from 'react';
-import { ArrowDownLeft, ArrowUpRight, Calendar, Clock, Edit2, Trash2 } from 'lucide-react';
+import { memo } from 'react';
+import { ArrowDownLeft, ArrowUpRight, Clock, Edit2, Trash2, Calendar } from 'lucide-react';
 
-export const ExpenseItemCard = React.memo(function ExpenseItemCard({
+export const ExpenseItemCard = memo(function ExpenseItemCard({
   item,
   formatCurrency,
   formatDateTime,

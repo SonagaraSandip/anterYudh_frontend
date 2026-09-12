@@ -1,4 +1,4 @@
-import React from 'react';
+import { memo } from 'react';
 import clsx from 'clsx';
 import {
   Clock,
@@ -9,10 +9,9 @@ import {
   Trash2
 } from 'lucide-react';
 
-export const TradeMobileCard = React.memo(function TradeMobileCard({
+export const TradeMobileCard = memo(function TradeMobileCard({
   trade,
   metrics,
-  formatDate,
   formatCurrency,
   onPartialSell,
   onPartialBuy,
@@ -43,12 +42,18 @@ export const TradeMobileCard = React.memo(function TradeMobileCard({
 
   return (
     <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-2.5 shadow-sm">
-      {/* Top Line: Asset + Status + P/L */}
+      {/* Top Line: Asset + Status + MTF Badge + P/L */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
           <span className="font-bold text-white text-xs sm:text-sm font-mono tracking-tight truncate">
             {trade.assetName}
           </span>
+
+          {trade.tradeType === 'mtf' && (
+            <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">
+              MTF
+            </span>
+          )}
 
           {/* Status Badge */}
           {isFullyClosed ? (

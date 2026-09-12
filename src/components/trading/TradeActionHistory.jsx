@@ -1,31 +1,26 @@
-import React from 'react';
+import { useMemo } from 'react';
 import clsx from 'clsx';
 import {
   History,
   TrendingUp,
   TrendingDown,
   ArrowUpRight,
-  ArrowDownRight,
   PlusCircle,
   Layers,
   Clock,
   ExternalLink,
-  Calendar,
-  Zap,
-  CheckCircle2,
-  DollarSign
+  CheckCircle2
 } from 'lucide-react';
 
 export function TradeActionHistory({
   trades = [],
-  actionLogs = [],
   onOpenTrade,
   onOpenLegsHistory,
   formatCurrency,
   formatDate
 }) {
   // Derive latest actions from all trades' transactions/legs
-  const allActions = React.useMemo(() => {
+  const allActions = useMemo(() => {
     const list = [];
 
     (trades || []).forEach((trade) => {

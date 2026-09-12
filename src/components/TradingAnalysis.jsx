@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import clsx from 'clsx';
 import {
   TrendingUp,
@@ -14,28 +14,22 @@ import {
   Target,
   Shield,
   Clock,
-  Receipt,
-  Award,
-  AlertTriangle,
   CheckCircle2,
-  XCircle,
-  HelpCircle,
-  Percent,
-  DollarSign,
-  Flame,
-  Scale,
   Sparkles,
-  Search,
-  X,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  SlidersHorizontal,
   ArrowUpRight,
-  ArrowDownRight,
   RotateCcw,
   Timer,
-  CalendarDays
+  CalendarDays,
+  SlidersHorizontal,
+  ChevronDown,
+  Search,
+  DollarSign,
+  Award,
+  Scale,
+  Receipt,
+  Flame,
+  AlertTriangle
 } from 'lucide-react';
 import { TradeActionHistory } from './trading/TradeActionHistory';
 
@@ -141,6 +135,14 @@ export default function TradingAnalysis({
     }
   };
 
+  // MTF Interest Calculator (14.95% annual rate on funded capital)
+  const calculateMtfInterest = (fundedAmount, holdingDays, annualRate = 0.1495) => {
+    const principal = parseFloat(fundedAmount) || 0;
+    const days = parseInt(holdingDays, 10) || 0;
+    if (principal <= 0 || days <= 0) return 0;
+    return Number(((principal * annualRate / 365) * days).toFixed(2));
+  };
+
   // Standard trade metric calculation
   const calculateTradeMetrics = (trade) => {
     const rawTx = Array.isArray(trade.transactions) ? trade.transactions : [];
@@ -177,11 +179,6 @@ export default function TradingAnalysis({
       const realizedBuyCharges = totalBuyCharges * soldRatio;
       const realizedCharges = totalSellCharges + realizedBuyCharges;
 
-      const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - realizedCharges : null;
-      const returnsPercent = hasSells && costBasisOfSold > 0 ? (returnsInr / costBasisOfSold) * 100 : 0;
-
-      const openBuyCharges = Math.max(0, totalBuyCharges - realizedBuyCharges);
-
       const earliestBuyDate = buyLegs[0]?.date || trade.buyDate;
       const latestSellDate = sellLegs[sellLegs.length - 1]?.date || trade.sellDate;
       const { days: holdingDays, text: holdingDurationText } = getHoldingDuration(
@@ -190,6 +187,14 @@ export default function TradingAnalysis({
         isFullyClosed
       );
 
+      const isMtf = trade.tradeType === 'mtf';
+      const mtfFundedAmount = parseFloat(trade.mtfFundedAmount) || (isMtf ? totalBuyCost * 0.75 : 0);
+      const mtfInterest = isMtf ? calculateMtfInterest(mtfFundedAmount * soldRatio, holdingDays) : 0;
+
+      const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - realizedCharges - mtfInterest : null;
+      const returnsPercent = hasSells && costBasisOfSold > 0 ? (returnsInr / costBasisOfSold) * 100 : 0;
+
+      const openBuyCharges = Math.max(0, totalBuyCharges - realizedBuyCharges);
       const currentInvested = remainingQty * avgBuyPrice;
 
       return {
@@ -212,7 +217,9 @@ export default function TradingAnalysis({
         realizedCharges,
         openBuyCharges,
         holdingDays,
-        holdingDurationText
+        holdingDurationText,
+        isMtf,
+        mtfInterest
       };
     }
 
@@ -233,19 +240,23 @@ export default function TradingAnalysis({
     const sellPrice = isClosed ? parseFloat(trade.sellPrice) : null;
     const sellValue = isClosed ? sellPrice * qty : null;
 
-    let returnsInr = null;
-    let returnsPercent = null;
-
-    if (isClosed) {
-      returnsInr = sellValue - invested - charges;
-      returnsPercent = invested > 0 ? (returnsInr / invested) * 100 : 0;
-    }
-
     const { days: holdingDays, text: holdingDurationText } = getHoldingDuration(
       trade.buyDate,
       trade.sellDate,
       isClosed
     );
+
+    const isMtf = trade.tradeType === 'mtf';
+    const mtfFundedAmount = parseFloat(trade.mtfFundedAmount) || (isMtf ? invested * 0.75 : 0);
+    const mtfInterest = isMtf ? calculateMtfInterest(mtfFundedAmount, holdingDays) : 0;
+
+    let returnsInr = null;
+    let returnsPercent = null;
+
+    if (isClosed) {
+      returnsInr = sellValue - invested - charges - mtfInterest;
+      returnsPercent = invested > 0 ? (returnsInr / invested) * 100 : 0;
+    }
 
     return {
       invested,
@@ -264,7 +275,9 @@ export default function TradingAnalysis({
       returnsPercent,
       charges,
       holdingDays,
-      holdingDurationText
+      holdingDurationText,
+      isMtf,
+      mtfInterest
     };
   };
 
@@ -926,6 +939,7 @@ export default function TradingAnalysis({
               <option value="all" className="bg-slate-900">All Types</option>
               <option value="stock" className="bg-slate-900">Stock (Delivery)</option>
               <option value="intraday" className="bg-slate-900">Intraday</option>
+              <option value="mtf" className="bg-slate-900">MTF (Margin)</option>
             </select>
           </div>
 

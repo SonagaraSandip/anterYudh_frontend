@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import clsx from 'clsx';
@@ -16,37 +16,27 @@ import {
   RefreshCw,
   Clock,
   ArrowUpRight,
-  ArrowDownRight,
-  Shield,
   Activity,
   BarChart2,
   FileSpreadsheet,
   CheckCircle2,
   AlertCircle,
   X,
-  ExternalLink,
   Target,
   Zap,
-  Tag,
   ChevronRight,
   ChevronLeft,
   ChevronDown,
-  ChevronUp,
   SlidersHorizontal,
-  ArrowUpDown,
-  LogOut,
-  Receipt,
-  Coins,
-  DollarSign,
   History,
-  PieChart,
-  Scale,
   Split,
   PlusCircle,
   MinusCircle,
-  Hourglass,
   Sparkles,
-  Download
+  Download,
+  PieChart,
+  Receipt,
+  ArrowUpDown
 } from 'lucide-react';
 import TradingAnalysis from './TradingAnalysis';
 import cacheManager from '../utils/cacheManager';
@@ -70,7 +60,12 @@ const DECISION_PRESETS = [
 ];
 
 /**
- * Standard Equity Charges Auto-Calculator (Brokerage, STT, Exchange, SEBI, GST, Stamp Duty, DP)
+ * Standard Equity Charges Auto-Calculator (Brokerage, STT, Exchange, SEBI, IPFT, GST, Stamp Duty, DP)
+ * Official Groww pricing (Sept 2026):
+ * - Delivery (CNC): 0.1% or ₹20 max (min ₹5), 0.1% STT (Buy & Sell), 0.015% Stamp Duty (Buy), ₹20 DP (Sell), 18% GST
+ * - Intraday (MIS): 0.1% or ₹20 max (min ₹5), 0.025% STT (Sell only), 0.003% Stamp Duty (Buy), 0 DP, 18% GST
+ * - MTF (Margin Trade): 0.1% (NO CAP, min ₹5), 0.1% STT (Buy & Sell), 0.015% Stamp Duty (Buy), ₹20 DP (Sell), 18% GST
+ * - Regulatory: Exchange (0.00297%), SEBI (0.0001%), IPFT (0.0001%)
  */
 export const calculateTradeCharges = (quantity, price, tradeType = 'stock', isBuy = true) => {
   const qty = parseFloat(quantity) || 0;
@@ -78,30 +73,50 @@ export const calculateTradeCharges = (quantity, price, tradeType = 'stock', isBu
   const tradeValue = qty * prc;
   if (tradeValue <= 0) return 0;
 
-  const isStock = tradeType !== 'intraday';
+  const isIntraday = tradeType === 'intraday';
+  const isMtf = tradeType === 'mtf';
 
-  const brokerage = Math.min(20, tradeValue * 0.0005);
-  const exchangeCharge = tradeValue * 0.0000325;
+  // Brokerage:
+  // - Delivery & Intraday: 0.1% of trade value, min ₹5, max ₹20 per order
+  // - MTF: 0.1% of trade value, min ₹5, NO CAP
+  const brokerage = isMtf
+    ? Math.max(5, tradeValue * 0.001)
+    : Math.max(5, Math.min(20, tradeValue * 0.001));
+
+  // Exchange Turnover Charge (NSE): 0.00297%
+  const exchangeCharge = tradeValue * 0.0000297;
+
+  // SEBI Turnover Fee: 0.0001% (₹10 / crore)
   const sebiCharge = tradeValue * 0.000001;
-  const gst = 0.18 * (brokerage + exchangeCharge + sebiCharge);
 
-  let stampDuty = 0;
-  let stt = 0;
+  // IPFT (NSE): 0.0001% (₹10 / crore)
+  const ipftCharge = tradeValue * 0.000001;
 
-  if (!isStock) {
-    // Intraday
-    stampDuty = isBuy ? (tradeValue * 0.00003) : 0;
-    stt = isBuy ? 0 : (tradeValue * 0.00025);
-  } else {
-    // Delivery (stock)
-    stampDuty = isBuy ? (tradeValue * 0.00015) : 0;
-    stt = tradeValue * 0.001;
-  }
+  const stampDuty = isIntraday
+    ? (isBuy ? tradeValue * 0.00003 : 0)
+    : (isBuy ? tradeValue * 0.00015 : 0);
+  const stt = isIntraday
+    ? (isBuy ? 0 : tradeValue * 0.00025)
+    : tradeValue * 0.001;
+  const dpCharge = (!isIntraday && !isBuy) ? 20.00 : 0;
 
-  const dpCharge = (!isBuy && isStock) ? 21.50 : 0;
+  // GST: 18% on (Brokerage + Exchange Charge + SEBI Fee + IPFT Fee)
+  const gst = 0.18 * (brokerage + exchangeCharge + sebiCharge + ipftCharge);
 
-  const totalCharges = brokerage + exchangeCharge + sebiCharge + gst + stampDuty + stt + dpCharge;
+  const totalCharges = brokerage + exchangeCharge + sebiCharge + ipftCharge + gst + stampDuty + stt + dpCharge;
   return Math.round(totalCharges * 100) / 100;
+};
+
+/**
+ * MTF Daily & Total Holding Interest Calculator
+ * Annual Interest Rate: 14.95% on funded amount
+ */
+export const calculateMtfInterest = (fundedAmount, holdingDays = 0, annualRate = 14.95) => {
+  const funded = parseFloat(fundedAmount) || 0;
+  const days = Math.max(0, parseInt(holdingDays, 10) || 0);
+  if (funded <= 0 || days <= 0) return 0;
+  const dailyRate = (annualRate / 100) / 365;
+  return Math.round(funded * dailyRate * days * 100) / 100;
 };
 
 export default function TradingView() {
@@ -124,15 +139,17 @@ export default function TradingView() {
   // Filters State (Sort filter + Search + Category Tabs)
   const [sortBy, setSortBy] = useState('latest'); // 'latest' | 'profit_desc' | 'loss_desc' | 'returns_pct_desc' | 'holding_desc' | 'holding_asc'
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'stock' | 'intraday'
+  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'stock' | 'intraday' | 'mtf'
 
   // Pagination State (Max 10 entries per page)
   const [stockPage, setStockPage] = useState(1);
   const [intradayPage, setIntradayPage] = useState(1);
+  const [mtfPage, setMtfPage] = useState(1);
 
   // Mobile Collapsible / Expandable Sections State
   const [isStockExpanded, setIsStockExpanded] = useState(true);
   const [isIntradayExpanded, setIsIntradayExpanded] = useState(true);
+  const [isMtfExpanded, setIsMtfExpanded] = useState(true);
 
   // Add / Edit Full Trade Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -143,13 +160,14 @@ export default function TradingView() {
   const [isSubmittingPartialBuy, setIsSubmittingPartialBuy] = useState(false);
 
   // Form Fields State
-  const [formTradeType, setFormTradeType] = useState('stock'); // 'stock' | 'intraday'
+  const [formTradeType, setFormTradeType] = useState('stock'); // 'stock' | 'intraday' | 'mtf'
   const [formAssetName, setFormAssetName] = useState('');
   const [formBuyDate, setFormBuyDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [formBuyPrice, setFormBuyPrice] = useState('');
   const [formQuantity, setFormQuantity] = useState('1');
-  const [formCharges, setFormCharges] = useState('20');
-  const [formTradeDecision, setFormTradeDecision] = useState('Self');
+  const [formCharges, setFormCharges] = useState('0');
+  const [formMtfFundedAmount, setFormMtfFundedAmount] = useState('');
+  const [formTradeDecision, setFormTradeDecision] = useState('Eagle Eye');
   const [formCustomDecision, setFormCustomDecision] = useState('');
   const [formIsExited, setFormIsExited] = useState(false);
   const [formSellDate, setFormSellDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -178,6 +196,7 @@ export default function TradingView() {
 
   // Delete Confirm Modal State
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isRecalculatingBreakdown, setIsRecalculatingBreakdown] = useState(false);
 
   // Close modals on Escape key press
   useEffect(() => {
@@ -366,11 +385,6 @@ export default function TradingView() {
       const realizedBuyCharges = totalBuyCharges * soldRatio;
       const realizedCharges = totalSellCharges + realizedBuyCharges;
 
-      const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - realizedCharges : null;
-      const returnsPercent = hasSells && costBasisOfSold > 0 ? (returnsInr / costBasisOfSold) * 100 : 0;
-
-      const openBuyCharges = Math.max(0, totalBuyCharges - realizedBuyCharges);
-
       const earliestBuyDate = buyLegs[0]?.date || trade.buyDate;
       const latestSellDate = sellLegs[sellLegs.length - 1]?.date || trade.sellDate;
       const { days: holdingDays, text: holdingDurationText } = getHoldingDuration(
@@ -378,6 +392,16 @@ export default function TradingView() {
         latestSellDate,
         isFullyClosed
       );
+
+      const isMtf = trade.tradeType === 'mtf';
+      const mtfFundedAmount = parseFloat(trade.mtfFundedAmount) || (isMtf ? totalBuyCost * 0.75 : 0);
+      const mtfDailyInterest = isMtf ? (mtfFundedAmount * 0.1495) / 365 : 0;
+      const mtfInterest = isMtf ? calculateMtfInterest(mtfFundedAmount, holdingDays) : 0;
+
+      const returnsInr = hasSells ? totalSellRevenue - costBasisOfSold - realizedCharges - mtfInterest : null;
+      const returnsPercent = hasSells && costBasisOfSold > 0 ? (returnsInr / costBasisOfSold) * 100 : 0;
+
+      const openBuyCharges = Math.max(0, totalBuyCharges - realizedBuyCharges);
 
       const currentInvested = remainingQty * avgBuyPrice;
 
@@ -407,7 +431,11 @@ export default function TradingView() {
         sellLegsCount: sellLegs.length,
         legs: rawTx,
         holdingDays,
-        holdingDurationText
+        holdingDurationText,
+        isMtf,
+        mtfFundedAmount,
+        mtfInterest,
+        mtfDailyInterest
       };
     }
 
@@ -428,19 +456,24 @@ export default function TradingView() {
     const sellPrice = isClosed ? parseFloat(trade.sellPrice) : null;
     const sellValue = isClosed ? sellPrice * qty : null;
 
-    let returnsInr = null;
-    let returnsPercent = null;
-
-    if (isClosed) {
-      returnsInr = sellValue - invested - charges;
-      returnsPercent = invested > 0 ? (returnsInr / invested) * 100 : 0;
-    }
-
     const { days: holdingDays, text: holdingDurationText } = getHoldingDuration(
       trade.buyDate,
       trade.sellDate,
       isClosed
     );
+
+    const isMtf = trade.tradeType === 'mtf';
+    const mtfFundedAmount = parseFloat(trade.mtfFundedAmount) || (isMtf ? invested * 0.75 : 0);
+    const mtfDailyInterest = isMtf ? (mtfFundedAmount * 0.1495) / 365 : 0;
+    const mtfInterest = isMtf ? calculateMtfInterest(mtfFundedAmount, holdingDays) : 0;
+
+    let returnsInr = null;
+    let returnsPercent = null;
+
+    if (isClosed) {
+      returnsInr = sellValue - invested - charges - mtfInterest;
+      returnsPercent = invested > 0 ? (returnsInr / invested) * 100 : 0;
+    }
 
     return {
       invested,
@@ -488,7 +521,11 @@ export default function TradingView() {
           : [])
       ],
       holdingDays,
-      holdingDurationText
+      holdingDurationText,
+      isMtf,
+      mtfFundedAmount,
+      mtfInterest,
+      mtfDailyInterest
     };
   };
 
@@ -540,6 +577,11 @@ export default function TradingView() {
     return processAndSortTrades(list);
   }, [trades, sortBy]);
 
+  const mtfTrades = useMemo(() => {
+    const list = trades.filter((t) => t.tradeType === 'mtf');
+    return processAndSortTrades(list);
+  }, [trades, sortBy]);
+
   // Master Dashboard Calculations (Including Realized P&L on all partial & full closes)
   const masterStats = useMemo(() => {
     let stockTotalPl = 0;
@@ -558,8 +600,17 @@ export default function TradingView() {
     let intradayWinCount = 0;
     let intradayCharges = 0;
 
+    let mtfTotalPl = 0;
+    let mtfInvested = 0;
+    let mtfCurrentInvested = 0;
+    let mtfClosedCount = 0;
+    let mtfOpenCount = 0;
+    let mtfWinCount = 0;
+    let mtfCharges = 0;
+    let mtfInterestTotal = 0;
+
     trades.forEach((t) => {
-      const { invested, currentInvested, hasSells, returnsInr, charges, isOpen, isPartial } = calculateTradeMetrics(t);
+      const { invested, currentInvested, hasSells, returnsInr, charges, mtfInterest, isOpen, isPartial } = calculateTradeMetrics(t);
       if (t.tradeType === 'stock') {
         stockInvested += invested;
         stockCurrentInvested += currentInvested;
@@ -569,6 +620,17 @@ export default function TradingView() {
           stockTotalPl += returnsInr;
           stockClosedCount += 1;
           if (returnsInr > 0) stockWinCount += 1;
+        }
+      } else if (t.tradeType === 'mtf') {
+        mtfInvested += invested;
+        mtfCurrentInvested += currentInvested;
+        mtfCharges += charges;
+        mtfInterestTotal += (mtfInterest || 0);
+        if (isOpen || isPartial) mtfOpenCount += 1;
+        if (hasSells && returnsInr !== null) {
+          mtfTotalPl += returnsInr;
+          mtfClosedCount += 1;
+          if (returnsInr > 0) mtfWinCount += 1;
         }
       } else {
         intradayInvested += invested;
@@ -583,14 +645,14 @@ export default function TradingView() {
       }
     });
 
-    const netOverallPl = stockTotalPl + intradayTotalPl;
-    const totalChargesPaid = stockCharges + intradayCharges;
-    const totalClosed = stockClosedCount + intradayClosedCount;
-    const totalOpen = stockOpenCount + intradayOpenCount;
-    const totalWins = stockWinCount + intradayWinCount;
+    const netOverallPl = stockTotalPl + intradayTotalPl + mtfTotalPl;
+    const totalChargesPaid = stockCharges + intradayCharges + mtfCharges + mtfInterestTotal;
+    const totalClosed = stockClosedCount + intradayClosedCount + mtfClosedCount;
+    const totalOpen = stockOpenCount + intradayOpenCount + mtfOpenCount;
+    const totalWins = stockWinCount + intradayWinCount + mtfWinCount;
     const overallWinRate = totalClosed > 0 ? ((totalWins / totalClosed) * 100).toFixed(1) : null;
-    const totalInvested = stockInvested + intradayInvested;
-    const totalCurrentInvested = stockCurrentInvested + intradayCurrentInvested;
+    const totalInvested = stockInvested + intradayInvested + mtfInvested;
+    const totalCurrentInvested = stockCurrentInvested + intradayCurrentInvested + mtfCurrentInvested;
 
     return {
       stockTotalPl,
@@ -605,6 +667,13 @@ export default function TradingView() {
       intradayClosedCount,
       intradayOpenCount,
       intradayCharges,
+      mtfTotalPl,
+      mtfInvested,
+      mtfCurrentInvested,
+      mtfClosedCount,
+      mtfOpenCount,
+      mtfCharges,
+      mtfInterestTotal,
       totalChargesPaid,
       netOverallPl,
       totalClosed,
@@ -615,44 +684,18 @@ export default function TradingView() {
     };
   }, [trades]);
 
-  // Reactive Auto-Calculate Charges for Simple Modal
-  useEffect(() => {
-    if (modalMode === 'simple' && isModalOpen) {
-      const bPrice = parseFloat(formBuyPrice) || 0;
-      const bQty = parseInt(formQuantity, 10) || 0;
-      if (bPrice > 0 && bQty > 0) {
-        const buyChg = calculateTradeCharges(bQty, bPrice, formTradeType, true);
-        const sPrice = formIsExited && formSellPrice ? parseFloat(formSellPrice) || 0 : 0;
-        const sellChg = formIsExited && sPrice > 0 ? calculateTradeCharges(bQty, sPrice, formTradeType, false) : 0;
-        const total = buyChg + sellChg;
-        setFormCharges(total > 0 ? String(total) : '0');
-      }
+  // Helper to auto-calculate charges for simple entry mode
+  const updateFormChargesAuto = (qty, buyPrice, tradeType, isExited, sellPrice) => {
+    const bPrice = parseFloat(buyPrice) || 0;
+    const bQty = parseInt(qty, 10) || 0;
+    if (bPrice > 0 && bQty > 0) {
+      const buyChg = calculateTradeCharges(bQty, bPrice, tradeType, true);
+      const sPrice = isExited && sellPrice ? parseFloat(sellPrice) || 0 : 0;
+      const sellChg = isExited && sPrice > 0 ? calculateTradeCharges(bQty, sPrice, tradeType, false) : 0;
+      const total = buyChg + sellChg;
+      setFormCharges(total > 0 ? String(total) : '0');
     }
-  }, [formQuantity, formBuyPrice, formTradeType, formIsExited, formSellPrice, modalMode, isModalOpen]);
-
-  // Reactive Auto-Calculate Charges for Partial Sell Modal
-  useEffect(() => {
-    if (partialSellTarget && partialSellQty && partialSellPrice) {
-      const q = parseInt(partialSellQty, 10) || 0;
-      const p = parseFloat(partialSellPrice) || 0;
-      if (q > 0 && p > 0) {
-        const chg = calculateTradeCharges(q, p, partialSellTarget.tradeType, false);
-        setPartialSellCharges(String(chg));
-      }
-    }
-  }, [partialSellQty, partialSellPrice, partialSellTarget]);
-
-  // Reactive Auto-Calculate Charges for Partial Buy Modal
-  useEffect(() => {
-    if (partialBuyTarget && partialBuyQty && partialBuyPrice) {
-      const q = parseInt(partialBuyQty, 10) || 0;
-      const p = parseFloat(partialBuyPrice) || 0;
-      if (q > 0 && p > 0) {
-        const chg = calculateTradeCharges(q, p, partialBuyTarget.tradeType, true);
-        setPartialBuyCharges(String(chg));
-      }
-    }
-  }, [partialBuyQty, partialBuyPrice, partialBuyTarget]);
+  };
 
   // Open Full Add Trade Modal
   const handleOpenAddModal = (defaultType = 'stock') => {
@@ -665,6 +708,7 @@ export default function TradingView() {
     setFormBuyPrice('');
     setFormQuantity('1');
     setFormCharges('0');
+    setFormMtfFundedAmount('');
     setFormTradeDecision('Self');
     setFormCustomDecision('');
     setFormIsExited(false);
@@ -695,6 +739,7 @@ export default function TradingView() {
     setFormBuyPrice(t.buyPrice !== undefined ? String(t.buyPrice) : '');
     setFormQuantity(t.quantity !== undefined ? String(t.quantity) : '1');
     setFormCharges(t.charges !== undefined ? String(t.charges) : '0');
+    setFormMtfFundedAmount(t.mtfFundedAmount !== undefined && t.mtfFundedAmount !== null ? String(t.mtfFundedAmount) : '');
 
     if (DECISION_PRESETS.includes(t.tradeDecision)) {
       setFormTradeDecision(t.tradeDecision);
@@ -896,6 +941,52 @@ export default function TradingView() {
     );
   };
 
+  const handleRecalculateAllFormLegs = () => {
+    setFormLegs((prev) =>
+      prev.map((l) => {
+        const isBuy = l.type !== 'SELL';
+        const qty = parseFloat(l.quantity) || 0;
+        const prc = parseFloat(l.price) || 0;
+        const autoChg = calculateTradeCharges(qty, prc, formTradeType, isBuy);
+        return {
+          ...l,
+          charges: String(autoChg)
+        };
+      })
+    );
+  };
+
+  const handleRecalculateBreakdownCharges = async () => {
+    if (!legsHistoryTarget || isRecalculatingBreakdown) return;
+    setIsRecalculatingBreakdown(true);
+    try {
+      const metrics = calculateTradeMetrics(legsHistoryTarget);
+      const updatedLegs = metrics.legs.map((l) => {
+        const isBuy = l.type !== 'SELL';
+        const q = parseFloat(l.quantity) || 0;
+        const p = parseFloat(l.price) || 0;
+        const autoChg = calculateTradeCharges(q, p, legsHistoryTarget.tradeType, isBuy);
+        return {
+          ...l,
+          charges: autoChg
+        };
+      });
+      const totalChg = updatedLegs.reduce((sum, l) => sum + l.charges, 0);
+
+      const res = await axios.put(`${API_BASE}/${legsHistoryTarget.id}`, {
+        transactions: updatedLegs,
+        charges: totalChg
+      });
+      const finalTrade = res.data;
+      setTrades((prev) => prev.map((t) => (t.id === finalTrade.id ? finalTrade : t)));
+      setLegsHistoryTarget(finalTrade);
+    } catch (err) {
+      console.warn('Recalculate breakdown charges failed:', err);
+    } finally {
+      setIsRecalculatingBreakdown(false);
+    }
+  };
+
   // Preview metrics calculated live for multi-leg modal
   const formPreviewMetrics = useMemo(() => {
     if (modalMode !== 'multileg') {
@@ -995,6 +1086,7 @@ export default function TradingView() {
         buyPrice: avgBuyPrice,
         quantity: totalBuyQty || 1,
         charges: totalCharges,
+        mtfFundedAmount: formTradeType === 'mtf' ? (parseFloat(formMtfFundedAmount) || null) : null,
         tradeDecision: finalDecision,
         sellDate: latestSellDate,
         sellPrice: avgSellPrice,
@@ -1005,7 +1097,12 @@ export default function TradingView() {
       const bPrice = parseFloat(formBuyPrice) || 0;
       const bQty = parseInt(formQuantity, 10) || 1;
       const sPrice = formIsExited && formSellPrice ? parseFloat(formSellPrice) : null;
-      const chg = parseFloat(formCharges) || 0;
+      const autoBuy = calculateTradeCharges(bQty, bPrice, formTradeType, true);
+      const autoSell = sPrice !== null ? calculateTradeCharges(bQty, sPrice, formTradeType, false) : 0;
+      const chg = parseFloat(formCharges) || (autoBuy + autoSell);
+
+      const buyLegCharge = sPrice !== null ? autoBuy : chg;
+      const sellLegCharge = sPrice !== null ? (chg > autoBuy ? chg - autoBuy : autoSell) : 0;
 
       const defaultTransactions = [
         {
@@ -1014,7 +1111,7 @@ export default function TradingView() {
           date: formBuyDate,
           price: bPrice,
           quantity: bQty,
-          charges: chg,
+          charges: buyLegCharge,
           notes: 'Initial Entry'
         },
         ...(sPrice !== null
@@ -1025,7 +1122,7 @@ export default function TradingView() {
                 date: formSellDate,
                 price: sPrice,
                 quantity: bQty,
-                charges: 0,
+                charges: sellLegCharge,
                 notes: 'Full Exit'
               }
             ]
@@ -1039,6 +1136,7 @@ export default function TradingView() {
         buyPrice: bPrice,
         quantity: bQty,
         charges: chg,
+        mtfFundedAmount: formTradeType === 'mtf' ? (parseFloat(formMtfFundedAmount) || null) : null,
         tradeDecision: finalDecision,
         sellDate: formIsExited ? formSellDate : null,
         sellPrice: sPrice,
@@ -1407,7 +1505,7 @@ export default function TradingView() {
               </div>
             </div>
 
-            {/* Action Buttons: Export + Analyze > + Stock Trade + Intraday (Responsive 2x2 on Mobile, Flex on Desktop) */}
+            {/* Action Buttons: Export + Analyze > + Stock Trade + Intraday + MTF (Responsive on Mobile, Flex on Desktop) */}
             <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
               <button
                 onClick={() => exportTradesToExcel(trades)}
@@ -1432,7 +1530,7 @@ export default function TradingView() {
                 className="py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-blue-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
               >
                 <TrendingUp className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">+ Stock</span>
+                <span className="truncate">Stock</span>
               </button>
 
               <button
@@ -1440,22 +1538,30 @@ export default function TradingView() {
                 className="py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-cyan-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate"
               >
                 <Zap className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">+ Intra</span>
+                <span className="truncate">Intra</span>
+              </button>
+
+              <button
+                onClick={() => handleOpenAddModal('mtf')}
+                className="py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-purple-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate col-span-2 sm:col-span-1"
+              >
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">MTF</span>
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Master Dashboard - 4 Summary Cards (100% Mobile Readable, No Truncations) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+      {/* 2. Master Dashboard - 5 Summary Cards (100% Mobile Readable, No Truncations) */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-4">
         {/* Card 1: Total Stock P/L */}
         <div className="bg-slate-900/90 border border-blue-500/20 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
               <span className="flex items-center gap-1 text-blue-300">
                 <TrendingUp className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                <span>Stock P/L</span>
+                <span>Stock (CNC)</span>
               </span>
               <span className="text-[9px] font-mono font-bold text-blue-400">
                 {stockTrades.length} trades
@@ -1491,10 +1597,10 @@ export default function TradingView() {
             <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
               <span className="flex items-center gap-1 text-cyan-300">
                 <Zap className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                <span>Intraday P/L</span>
+                <span>Intraday (MIS)</span>
               </span>
               <span className="text-[9px] font-mono font-bold text-cyan-400">
-                {intradayTrades.length} setups
+                {intradayTrades.length} trades
               </span>
             </div>
             <div
@@ -1521,7 +1627,43 @@ export default function TradingView() {
           </div>
         </div>
 
-        {/* Card 3: Net Overall P/L */}
+        {/* Card 3: Total MTF P/L */}
+        <div className="bg-slate-900/90 border border-purple-500/20 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
+              <span className="flex items-center gap-1 text-purple-300">
+                <Layers className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <span>MTF Margin</span>
+              </span>
+              <span className="text-[9px] font-mono font-bold text-purple-400">
+                {mtfTrades.length} trades
+              </span>
+            </div>
+            <div
+              className={clsx(
+                'text-base sm:text-2xl font-black font-mono tracking-tight my-1 sm:my-1.5 truncate',
+                masterStats.mtfTotalPl > 0 && 'text-emerald-400',
+                masterStats.mtfTotalPl < 0 && 'text-rose-400',
+                masterStats.mtfTotalPl === 0 && 'text-slate-200'
+              )}
+            >
+              {masterStats.mtfTotalPl > 0 ? '+' : ''}
+              {formatCurrency(masterStats.mtfTotalPl)}
+            </div>
+          </div>
+          <div className="pt-1.5 border-t border-slate-800/80 space-y-0.5 text-[9px] sm:text-[10px] font-mono">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Active:</span>
+              <span className="text-purple-400 font-bold">{formatCurrency(masterStats.mtfCurrentInvested)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Interest:</span>
+              <span className="text-amber-300 font-semibold">{formatCurrency(masterStats.mtfInterestTotal)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Net Overall P/L */}
         <div className="bg-slate-900/90 border border-emerald-500/20 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
@@ -1559,8 +1701,8 @@ export default function TradingView() {
           </div>
         </div>
 
-        {/* Card 4: Total Charges & Brokerage Paid */}
-        <div className="bg-slate-900/90 border border-amber-500/20 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between">
+        {/* Card 5: Total Charges & Brokerage Paid */}
+        <div className="bg-slate-900/90 border border-amber-500/20 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between col-span-2 sm:col-span-1">
           <div>
             <div className="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-semibold">
               <span className="flex items-center gap-1 text-amber-300">
@@ -1577,18 +1719,18 @@ export default function TradingView() {
           </div>
           <div className="pt-1.5 border-t border-slate-800/80 space-y-0.5 text-[9px] sm:text-[10px] font-mono">
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">Delivery:</span>
-              <span className="text-slate-300 font-semibold">{formatCurrency(masterStats.stockCharges)}</span>
+              <span className="text-slate-400">Delivery/Intra:</span>
+              <span className="text-slate-300 font-semibold">{formatCurrency(masterStats.stockCharges + masterStats.intradayCharges)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">Intraday:</span>
-              <span className="text-slate-300 font-semibold">{formatCurrency(masterStats.intradayCharges)}</span>
+              <span className="text-slate-400">MTF Interest:</span>
+              <span className="text-amber-300 font-semibold">{formatCurrency(masterStats.mtfInterestTotal)}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 3. Filter & Sort Bar (Cleaned Month filter, added Analyze shortcut) */}
+      {/* 3. Filter & Sort Bar */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 bg-slate-900/80 p-2.5 sm:p-3.5 rounded-2xl border border-slate-800">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 flex-wrap">
           {/* Sort Filter */}
@@ -1637,9 +1779,9 @@ export default function TradingView() {
           </div>
         </div>
 
-        {/* Tab Switcher & Analysis Shortcut Link */}
+        {/* Tab Switcher */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 w-full sm:w-auto">
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 w-full sm:w-auto flex-wrap">
             <button
               onClick={() => setActiveTab('all')}
               className={clsx(
@@ -1668,6 +1810,16 @@ export default function TradingView() {
             >
               <Zap className="w-3 h-3 shrink-0" />
               <span className="truncate">Intraday ({intradayTrades.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('mtf')}
+              className={clsx(
+                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 truncate',
+                activeTab === 'mtf' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-purple-300'
+              )}
+            >
+              <Layers className="w-3 h-3 shrink-0" />
+              <span className="truncate">MTF ({mtfTrades.length})</span>
             </button>
           </div>
         </div>
@@ -1698,6 +1850,18 @@ export default function TradingView() {
             currentPage: intradayPage,
             onPageChange: (p) => setIntradayPage(p)
           })}
+
+        {(activeTab === 'all' || activeTab === 'mtf') &&
+          renderNotionTradeGrid({
+            tradeList: mtfTrades,
+            title: 'MTF Margin Journal (Pay Later / Funded)',
+            typeBadgeColor: 'bg-gradient-to-tr from-purple-600 to-indigo-600 shadow-purple-600/30',
+            iconComponent: Layers,
+            isExpanded: isMtfExpanded,
+            onToggleExpand: () => setIsMtfExpanded((prev) => !prev),
+            currentPage: mtfPage,
+            onPageChange: (p) => setMtfPage(p)
+          })}
       </div>
 
       {/* ================= ADD / EDIT FULL TRADE MODAL ================= */}
@@ -1723,11 +1887,15 @@ export default function TradingView() {
                       'p-1.5 sm:p-2 rounded-xl text-white shadow-md shrink-0',
                       formTradeType === 'intraday'
                         ? 'bg-cyan-600 shadow-cyan-600/30'
+                        : formTradeType === 'mtf'
+                        ? 'bg-purple-600 shadow-purple-600/30'
                         : 'bg-blue-600 shadow-blue-600/30'
                     )}
                   >
                     {formTradeType === 'intraday' ? (
                       <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    ) : formTradeType === 'mtf' ? (
+                      <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     ) : (
                       <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     )}
@@ -1738,10 +1906,14 @@ export default function TradingView() {
                         ? 'Edit Trade'
                         : formTradeType === 'intraday'
                         ? 'Log Intraday'
+                        : formTradeType === 'mtf'
+                        ? 'Log MTF Margin Trade'
                         : 'Log Stock Trade'}
                     </h3>
                     <p className="text-[10px] text-slate-400 truncate hidden sm:block">
-                      Support for partial buy averaging & scaling out
+                      {formTradeType === 'mtf'
+                        ? '14.95% p.a. interest, no brokerage cap, up to 4x leverage'
+                        : 'Support for partial buy averaging & scaling out'}
                     </p>
                   </div>
                 </div>
@@ -1785,35 +1957,115 @@ export default function TradingView() {
               {/* Scrollable Form Body */}
               <form onSubmit={handleSaveTrade} className="space-y-3 flex-1 overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin scrollbar-thumb-slate-700">
                 {/* Trade Type Selector */}
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setFormTradeType('stock')}
+                    onClick={() => {
+                      setFormTradeType('stock');
+                      if (modalMode === 'simple') updateFormChargesAuto(formQuantity, formBuyPrice, 'stock', formIsExited, formSellPrice);
+                    }}
                     className={clsx(
-                      'py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1',
+                      'py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1',
                       formTradeType === 'stock'
                         ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
                         : 'text-slate-400 hover:text-white'
                     )}
                   >
                     <TrendingUp className="w-3.5 h-3.5" />
-                    <span>Stock (Delivery)</span>
+                    <span>Delivery</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setFormTradeType('intraday')}
+                    onClick={() => {
+                      setFormTradeType('intraday');
+                      if (modalMode === 'simple') updateFormChargesAuto(formQuantity, formBuyPrice, 'intraday', formIsExited, formSellPrice);
+                    }}
                     className={clsx(
-                      'py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1',
+                      'py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1',
                       formTradeType === 'intraday'
                         ? 'bg-gradient-to-r from-cyan-600 to-teal-600 text-white shadow-md'
                         : 'text-slate-400 hover:text-white'
                     )}
                   >
                     <Zap className="w-3.5 h-3.5" />
-                    <span>Intraday Trade</span>
+                    <span>Intraday</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormTradeType('mtf');
+                      if (modalMode === 'simple') updateFormChargesAuto(formQuantity, formBuyPrice, 'mtf', formIsExited, formSellPrice);
+                    }}
+                    className={clsx(
+                      'py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1',
+                      formTradeType === 'mtf'
+                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    )}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>MTF (Margin)</span>
                   </button>
                 </div>
+
+                {/* MTF Configuration & Interest Live Calculator Panel */}
+                {formTradeType === 'mtf' && (
+                  <div className="p-2.5 sm:p-3 bg-purple-950/25 border border-purple-500/30 rounded-xl space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-purple-300 flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-purple-400" />
+                        <span>MTF Margin Trade Setup (14.95% p.a. Interest)</span>
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                        Up to 4x Leverage
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                      <div>
+                        <label className="block text-[10px] sm:text-[11px] font-semibold text-slate-300 mb-1">
+                          Funded / Borrowed Amount (₹)
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder={
+                            parseFloat(formBuyPrice) > 0 && parseInt(formQuantity, 10) > 0
+                              ? String(((parseFloat(formBuyPrice) * parseInt(formQuantity, 10)) * 0.75).toFixed(2))
+                              : 'e.g. 75000'
+                          }
+                          value={formMtfFundedAmount}
+                          onChange={(e) => setFormMtfFundedAmount(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono font-bold text-white focus:outline-none focus:border-purple-500"
+                        />
+                        <span className="text-[9px] text-slate-400 mt-0.5 block">
+                          Leave blank to auto-fund 75% of trade value
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col justify-center bg-slate-950/60 p-2 rounded-lg border border-slate-800 text-[10px] font-mono space-y-0.5">
+                        <div className="flex justify-between text-slate-400">
+                          <span>Annual Interest:</span>
+                          <span className="text-purple-300 font-bold">14.95% / yr</span>
+                        </div>
+                        <div className="flex justify-between text-slate-400">
+                          <span>Est. Daily Interest:</span>
+                          <span className="text-amber-300 font-bold">
+                            {formatCurrency(
+                              ((parseFloat(formMtfFundedAmount) ||
+                                ((parseFloat(formBuyPrice) || 0) * (parseInt(formQuantity, 10) || 0) * 0.75)) *
+                                0.1495) /
+                                365
+                            )}
+                            /day
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Asset Name */}
                 <div>
@@ -1860,7 +2112,10 @@ export default function TradingView() {
                           required
                           placeholder="0.00"
                           value={formBuyPrice}
-                          onChange={(e) => setFormBuyPrice(e.target.value)}
+                          onChange={(e) => {
+                            setFormBuyPrice(e.target.value);
+                            updateFormChargesAuto(formQuantity, e.target.value, formTradeType, formIsExited, formSellPrice);
+                          }}
                           className="w-full px-2.5 py-1.5 sm:py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:border-cyan-500 transition"
                         />
                       </div>
@@ -1878,7 +2133,10 @@ export default function TradingView() {
                           required
                           placeholder="1"
                           value={formQuantity}
-                          onChange={(e) => setFormQuantity(e.target.value)}
+                          onChange={(e) => {
+                            setFormQuantity(e.target.value);
+                            updateFormChargesAuto(e.target.value, formBuyPrice, formTradeType, formIsExited, formSellPrice);
+                          }}
                           className="w-full px-2.5 py-1.5 sm:py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-cyan-500 transition"
                         />
                       </div>
@@ -1911,7 +2169,10 @@ export default function TradingView() {
                           <input
                             type="checkbox"
                             checked={formIsExited}
-                            onChange={(e) => setFormIsExited(e.target.checked)}
+                            onChange={(e) => {
+                              setFormIsExited(e.target.checked);
+                              updateFormChargesAuto(formQuantity, formBuyPrice, formTradeType, e.target.checked, formSellPrice);
+                            }}
                             className="w-4 h-4 rounded text-cyan-600 bg-slate-900 border-slate-700 accent-cyan-500 cursor-pointer"
                           />
                           <span className="text-xs font-semibold text-slate-200">
@@ -1946,7 +2207,10 @@ export default function TradingView() {
                               step="any"
                               placeholder="0.00"
                               value={formSellPrice}
-                              onChange={(e) => setFormSellPrice(e.target.value)}
+                              onChange={(e) => {
+                                setFormSellPrice(e.target.value);
+                                updateFormChargesAuto(formQuantity, formBuyPrice, formTradeType, formIsExited, e.target.value);
+                              }}
                               className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
                             />
                           </div>
@@ -1966,6 +2230,15 @@ export default function TradingView() {
                       </span>
 
                       <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleRecalculateAllFormLegs}
+                          className="px-2 py-1 rounded-lg bg-amber-950/60 text-amber-300 border border-amber-500/40 text-[10px] font-bold hover:bg-amber-900 flex items-center gap-1 transition"
+                          title="Recalculate all leg charges using official broker standard rates"
+                        >
+                          <Zap className="w-3 h-3 text-amber-400" />
+                          <span>Auto Charges</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleAddFormLeg('BUY')}
@@ -2279,7 +2552,14 @@ export default function TradingView() {
                       required
                       placeholder="0.00"
                       value={partialSellPrice}
-                      onChange={(e) => setPartialSellPrice(e.target.value)}
+                      onChange={(e) => {
+                        setPartialSellPrice(e.target.value);
+                        const q = parseInt(partialSellQty, 10) || 0;
+                        const p = parseFloat(e.target.value) || 0;
+                        if (q > 0 && p > 0 && partialSellTarget) {
+                          setPartialSellCharges(String(calculateTradeCharges(q, p, partialSellTarget.tradeType, false)));
+                        }
+                      }}
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
                     />
                   </div>
@@ -2437,7 +2717,14 @@ export default function TradingView() {
                       required
                       placeholder="0.00"
                       value={partialBuyPrice}
-                      onChange={(e) => setPartialBuyPrice(e.target.value)}
+                      onChange={(e) => {
+                        setPartialBuyPrice(e.target.value);
+                        const q = parseInt(partialBuyQty, 10) || 0;
+                        const p = parseFloat(e.target.value) || 0;
+                        if (q > 0 && p > 0 && partialBuyTarget) {
+                          setPartialBuyCharges(String(calculateTradeCharges(q, p, partialBuyTarget.tradeType, true)));
+                        }
+                      }}
                       disabled={isSubmittingPartialBuy}
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
                     />
@@ -2641,18 +2928,31 @@ export default function TradingView() {
               </div>
 
               <div className="flex items-center justify-between pt-2 border-t border-slate-800 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const t = legsHistoryTarget;
-                    setLegsHistoryTarget(null);
-                    handleOpenEditModal(t);
-                  }}
-                  className="text-xs text-cyan-400 hover:underline font-semibold flex items-center gap-1"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                  <span>Edit in Full Form</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t = legsHistoryTarget;
+                      setLegsHistoryTarget(null);
+                      handleOpenEditModal(t);
+                    }}
+                    className="text-xs text-cyan-400 hover:underline font-semibold flex items-center gap-1"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit in Full Form</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isRecalculatingBreakdown}
+                    onClick={handleRecalculateBreakdownCharges}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30 text-xs font-semibold hover:bg-amber-500/25 flex items-center gap-1 transition disabled:opacity-50"
+                    title="Recalculate all leg charges using standard Groww broker formulas"
+                  >
+                    <Zap className="w-3 h-3 text-amber-400" />
+                    <span>{isRecalculatingBreakdown ? 'Updating...' : 'Auto Recalculate Charges'}</span>
+                  </button>
+                </div>
 
                 <button
                   onClick={() => setLegsHistoryTarget(null)}

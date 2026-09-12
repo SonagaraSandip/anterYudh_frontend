@@ -4,7 +4,8 @@
 
 /**
  * Standard Equity Delivery Charges Auto-Calculator for IPO Allotments & Sells
- * (Brokerage, STT, Exchange Turnover, SEBI Fees, GST, Stamp Duty, DP Transaction Charge)
+ * - Allotment (Buy): 0 statutory/brokerage charges (ASBA application)
+ * - Exit (Sell): 0.1% or ₹20 max Brokerage, 0.1% STT, ₹20 DP charge (Groww ₹16.50 + CDSL ₹3.50), 18% GST
  */
 export const calculateIpoCharges = (quantity, price, isBuy = false) => {
   const qty = parseFloat(quantity) || 0;
@@ -12,20 +13,34 @@ export const calculateIpoCharges = (quantity, price, isBuy = false) => {
   const tradeValue = qty * prc;
   if (tradeValue <= 0) return 0;
 
-  // Zerodha / AngelOne / Groww delivery charges
-  const brokerage = isBuy ? 0 : Math.min(20, tradeValue * 0.0005);
-  const exchangeCharge = tradeValue * 0.0000325; // NSE 0.00325%
-  const sebiCharge = tradeValue * 0.000001; // SEBI ₹10 / crore
-  const gst = 0.18 * (brokerage + exchangeCharge + sebiCharge); // 18% GST
+  // IPO Allotment (Buy) has 0 statutory or brokerage charges (ASBA application)
+  if (isBuy) return 0;
 
-  // Delivery Stamp Duty: 0.015% on Buy, 0 on Sell
-  const stampDuty = isBuy ? (tradeValue * 0.00015) : 0;
-  // Delivery STT: 0.1% on Buy and Sell (for IPO allotment, ASBA buy STT is 0, sell STT is 0.1%)
-  const stt = isBuy ? 0 : (tradeValue * 0.001);
-  // DP Charge: ₹15.93 to ₹21.50 per scrip per day on selling delivery shares
-  const dpCharge = (!isBuy) ? 20.00 : 0;
+  // Brokerage: Delivery standard 0.1% of trade value, min ₹5, max ₹20 per order (Groww standard)
+  const brokerage = Math.max(5, Math.min(20, tradeValue * 0.001));
 
-  const totalCharges = brokerage + exchangeCharge + sebiCharge + gst + stampDuty + stt + dpCharge;
+  // Exchange Turnover Charge (NSE): 0.00297%
+  const exchangeCharge = tradeValue * 0.0000297;
+
+  // SEBI Turnover Fee: 0.0001% (₹10 / crore)
+  const sebiCharge = tradeValue * 0.000001;
+
+  // IPFT (NSE): 0.0001% (₹10 / crore)
+  const ipftCharge = tradeValue * 0.000001;
+
+  // Stamp Duty: 0 on sell
+  const stampDuty = 0;
+
+  // STT: 0.1% on delivery sell
+  const stt = tradeValue * 0.001;
+
+  // DP Charges: ₹20 flat on sell (Groww ₹16.50 + CDSL ₹3.50)
+  const dpCharge = 20.00;
+
+  // GST: 18% on (Brokerage + Exchange Charge + SEBI Fee + IPFT Fee)
+  const gst = 0.18 * (brokerage + exchangeCharge + sebiCharge + ipftCharge);
+
+  const totalCharges = brokerage + exchangeCharge + sebiCharge + ipftCharge + gst + stampDuty + stt + dpCharge;
   return Math.round(totalCharges * 100) / 100;
 };
 

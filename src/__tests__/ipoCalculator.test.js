@@ -7,18 +7,16 @@ import {
 
 describe('ipoCalculator', () => {
   describe('calculateIpoCharges', () => {
-    it('calculates delivery buy charges with stamp duty and exchange fees', () => {
+    it('calculates 0 charges for IPO allotment (buy via ASBA)', () => {
       const charges = calculateIpoCharges(50, 300, true);
-      // Buy trade value = 15,000. Brokerage = 0, STT = 0, DP = 0, Stamp duty = 2.25, Exchange + SEBI + GST
-      expect(charges).toBeGreaterThan(0);
-      expect(charges).toBeLessThan(10);
+      expect(charges).toBe(0);
     });
 
     it('calculates delivery sell charges with STT and DP transaction charges', () => {
       const charges = calculateIpoCharges(50, 450, false);
-      // Sell value = 22,500. STT (0.1%) = 22.5, DP charge = 20, Brokerage = min(20, 11.25), GST = 18%, etc.
+      // Sell value = 22,500. STT (0.1%) = 22.5, DP charge = 20, Brokerage = min(20, 22.5) = 20, GST = 18%, etc.
       expect(charges).toBeGreaterThan(50);
-      expect(charges).toBeLessThan(70);
+      expect(charges).toBeLessThan(80);
     });
   });
 

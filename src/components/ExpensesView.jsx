@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 
@@ -10,35 +10,24 @@ import {
   Calendar,
   Sparkles,
   CheckCircle2,
-  DollarSign,
   PieChart,
   Wallet,
   ShoppingBag,
-  Home,
-  Zap,
-  Coffee,
   ArrowUpRight,
-  ArrowDownLeft,
   Search,
   Filter,
   Trash2,
   Edit2,
-  RefreshCw,
   Clock,
   ChevronLeft,
   ChevronRight,
-  SlidersHorizontal,
-  Layers,
-  ArrowRightLeft,
-  Building,
-  Briefcase,
-  Gift,
-  HelpCircle,
-  Tag,
-  AlertCircle,
   X,
   Download,
-  ChevronDown
+  ChevronDown,
+  ArrowRightLeft,
+  ArrowDownLeft,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 

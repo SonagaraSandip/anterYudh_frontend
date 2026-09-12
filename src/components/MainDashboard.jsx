@@ -1,35 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import cacheManager from '../utils/cacheManager';
 import {
-  LayoutDashboard,
   TrendingUp,
-  TrendingDown,
   BarChart2,
   CreditCard,
   FileText,
   ShoppingBag,
-  ArrowUpRight,
-  ArrowDownRight,
-  CheckCircle2,
   Clock,
   Sparkles,
-  Shield,
-  Layers,
   ChevronRight,
-  Plus,
-  Zap,
   Activity,
-  DollarSign,
-  PieChart,
-  Lock,
-  Target,
-  Wallet,
-  ArrowUpDown,
   FileSpreadsheet,
-  AlertCircle,
   Cloud,
-  Database,
   BookOpen
 } from 'lucide-react';
 import { calculateIpoMetrics } from '../utils/ipoCalculator';
@@ -297,18 +280,18 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
     };
   }, [expenses]);
 
-  // Combined Portfolio Net P&L (Trading + IPOs + Cashflow)
+  // Combined Portfolio Net Wealth (Trading + Savings only)
   const portfolioNetWealth = useMemo(() => {
-    const totalPnl = (tradingStats.netPl || 0) + (ipoStats.totalProfitLoss || 0);
+    const totalPnl = (tradingStats.netPl || 0) + (cashflowStats.netSavings || 0);
     const combinedIncome = (cashflowStats.totalIncome || 0);
     const combinedExpense = (cashflowStats.totalExpense || 0);
     const netCashSavings = combinedIncome - combinedExpense;
     return {
       totalPnl,
       netCashSavings,
-      totalRealizedGain: totalPnl + Math.max(0, netCashSavings)
+      totalRealizedGain: (tradingStats.netPl || 0) + Math.max(0, netCashSavings)
     };
-  }, [tradingStats, ipoStats, cashflowStats]);
+  }, [tradingStats, cashflowStats]);
 
   // 4. Notes & Vault Stats
   const noteStats = useMemo(() => {
@@ -433,7 +416,7 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
                 {portfolioNetWealth.totalPnl >= 0 ? '+' : ''}{formatCurrency(portfolioNetWealth.totalPnl)}
               </span>
               <span className="text-[11px] sm:text-xs font-semibold text-slate-400 truncate">
-                Total Realized Profits (Trading + IPOs)
+                Total Wealth (Trading + Savings)
               </span>
             </div>
 
@@ -442,10 +425,7 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
                 Trading: <strong className={tradingStats.netPl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{formatCurrency(tradingStats.netPl)}</strong>
               </span>
               <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 truncate">
-                IPOs: <strong className="text-cyan-400">{formatCurrency(ipoStats.totalProfitLoss)}</strong>
-              </span>
-              <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 truncate">
-                Savings: <strong className="text-purple-300">{formatCurrency(cashflowStats.netSavings)}</strong>
+                Savings: <strong className={cashflowStats.netSavings >= 0 ? 'text-purple-300' : 'text-rose-400'}>{formatCurrency(cashflowStats.netSavings)}</strong>
               </span>
             </div>
           </div>

@@ -1,8 +1,8 @@
-import React from 'react';
+import { memo } from 'react';
 import clsx from 'clsx';
 import { CheckCircle2, Edit3, Trash2 } from 'lucide-react';
 
-export const BuyItemCard = React.memo(function BuyItemCard({
+export const BuyItemCard = memo(function BuyItemCard({
   item,
   formatCurrency,
   onEdit,

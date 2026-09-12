@@ -1,14 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import clsx from 'clsx';
 import {
   FileText,
   Lock,
-  Eye,
-  EyeOff,
-  Copy,
-  Check,
   Plus,
   Search,
   Pin,
@@ -20,18 +16,11 @@ import {
   ShoppingBag,
   Sparkles,
   CheckCircle2,
-  Clock,
-  DollarSign,
-  Layers,
-  ArrowUpRight,
   Filter,
   X,
-  AlertCircle,
-  Hash,
   FolderLock,
-  Palette,
-  CheckCheck,
-  RefreshCw
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 import cacheManager from '../utils/cacheManager';
