@@ -27,7 +27,9 @@ import {
   ArrowRightLeft,
   ArrowDownLeft,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Compass,
+  MapPin
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -35,6 +37,9 @@ import cacheManager from '../utils/cacheManager';
 import ExpenseAnalysis from './ExpenseAnalysis';
 import { exportExpensesToExcel } from '../utils/excelExporter';
 import { ExpenseItemCard } from './expenses/ExpenseItemCard';
+import { TripExpenseCard } from './expenses/TripExpenseCard';
+import TripDetailsModal from './expenses/TripDetailsModal';
+import TripManagementModal from './expenses/TripManagementModal';
 
 const API_BASE = '/api/expenses';
 
@@ -89,6 +94,18 @@ export default function ExpensesView() {
       return [];
     }
   });
+
+  const [trips, setTrips] = useState(() => {
+    const cached = cacheManager.get('cashflow_trips');
+    if (Array.isArray(cached)) return cached;
+    try {
+      const stored = JSON.parse(localStorage.getItem('antaryudh_trips_data') || '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
@@ -133,7 +150,14 @@ export default function ExpensesView() {
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
 
+  // Trip Modals & Selection State
+  const [selectedTripForDetails, setSelectedTripForDetails] = useState(null);
+  const [isTripManageModalOpen, setIsTripManageModalOpen] = useState(false);
+  const [editingTrip, setEditingTrip] = useState(null);
+  const [deleteTripTarget, setDeleteTripTarget] = useState(null);
+
   // Form State
+  const [formTripId, setFormTripId] = useState('');
   const [formType, setFormType] = useState('expense'); // 'expense' | 'income'
   const [formTitle, setFormTitle] = useState('');
   const [formCategorySelect, setFormCategorySelect] = useState('Food & Dining');
@@ -150,6 +174,20 @@ export default function ExpensesView() {
   // Delete Confirm Modal
   const [deleteTarget, setDeleteTarget] = useState(null);
 
+  // Fetch Trips
+  const fetchTrips = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/trips`);
+      if (Array.isArray(res.data)) {
+        setTrips(res.data);
+        cacheManager.set('cashflow_trips', res.data, 120000);
+        localStorage.setItem('antaryudh_trips_data', JSON.stringify(res.data));
+      }
+    } catch (err) {
+      console.warn('Could not fetch trips:', err);
+    }
+  };
+
   // Fetch Transactions from API (with SWR caching)
   const fetchTransactions = async () => {
     if (transactions.length === 0) {
@@ -157,11 +195,14 @@ export default function ExpensesView() {
     }
     setErrorMsg(null);
     try {
-      const res = await axios.get(API_BASE);
-      if (Array.isArray(res.data)) {
-        setTransactions(res.data);
-        cacheManager.set('cashflow_transactions', res.data, 120000);
-        localStorage.setItem('antaryudh_cashflow_data', JSON.stringify(res.data));
+      const [txRes] = await Promise.all([
+        axios.get(API_BASE),
+        fetchTrips()
+      ]);
+      if (Array.isArray(txRes.data)) {
+        setTransactions(txRes.data);
+        cacheManager.set('cashflow_transactions', txRes.data, 120000);
+        localStorage.setItem('antaryudh_cashflow_data', JSON.stringify(txRes.data));
       }
     } catch (err) {
       console.warn('Could not fetch from backend, loading cache:', err);
@@ -341,6 +382,69 @@ export default function ExpensesView() {
     return filteredTransactions.filter((t) => t.type === 'income');
   }, [filteredTransactions]);
 
+  // Grouping logic for Expenses:
+  // Expenses that belong to a trip roll up into a single consolidated Trip entry, while standalone expenses remain standalone items.
+  const displayExpenseItems = useMemo(() => {
+    const tripGroupMap = new Map();
+    const standaloneItems = [];
+
+    expenseList.forEach((item) => {
+      if (item.tripId) {
+        if (!tripGroupMap.has(item.tripId)) {
+          const matchedTrip = trips.find((t) => t.id === item.tripId) || {
+            id: item.tripId,
+            name: item.tripName || `Trip #${item.tripId}`,
+            destination: item.tripDestination || '',
+            coverColor: item.tripCoverColor || 'emerald',
+            status: 'active'
+          };
+          tripGroupMap.set(item.tripId, {
+            isTrip: true,
+            id: `trip-${item.tripId}`,
+            tripId: item.tripId,
+            trip: matchedTrip,
+            expenses: [],
+            totalSpent: 0,
+            latestDate: item.transactionDate || item.createdAt
+          });
+        }
+        const group = tripGroupMap.get(item.tripId);
+        group.expenses.push(item);
+        group.totalSpent += parseFloat(item.amount) || 0;
+        if (new Date(item.transactionDate) > new Date(group.latestDate)) {
+          group.latestDate = item.transactionDate;
+        }
+      } else {
+        standaloneItems.push({
+          isTrip: false,
+          id: `tx-${item.id}`,
+          item,
+          latestDate: item.transactionDate || item.createdAt
+        });
+      }
+    });
+
+    // Also include active trips so newly created trips appear immediately even before logging first expense
+    trips.forEach((t) => {
+      if (t.status === 'active' && !tripGroupMap.has(t.id)) {
+        tripGroupMap.set(t.id, {
+          isTrip: true,
+          id: `trip-${t.id}`,
+          tripId: t.id,
+          trip: t,
+          expenses: [],
+          totalSpent: 0,
+          latestDate: t.startDate || t.createdAt || new Date().toISOString()
+        });
+      }
+    });
+
+    const combined = [...Array.from(tripGroupMap.values()), ...standaloneItems];
+    // Sort chronologically by latestDate descending
+    combined.sort((a, b) => new Date(b.latestDate || 0) - new Date(a.latestDate || 0));
+    return combined;
+  }, [expenseList, trips]);
+
   // Monthly Overview Totals & Savings Rate
   const monthlyStats = useMemo(() => {
     let totalIncome = 0;
@@ -431,10 +535,16 @@ export default function ExpensesView() {
     };
   }, [transactions]);
 
+  // Active Trips list for quick glance strip
+  const activeTripsList = useMemo(() => {
+    return (Array.isArray(trips) ? trips : []).filter((t) => t.status === 'active');
+  }, [trips]);
+
   // Open Modal for New Entry
-  const handleOpenAddModal = (defaultType = 'expense') => {
+  const handleOpenAddModal = (defaultType = 'expense', defaultTripId = '') => {
     setEditingTransaction(null);
     setFormType(defaultType);
+    setFormTripId(defaultTripId ? String(defaultTripId) : '');
     setFormTitle('');
     setFormCategorySelect(
       defaultType === 'income' ? PRESET_INCOME_CATEGORIES[0] : PRESET_EXPENSE_CATEGORIES[0]
@@ -456,6 +566,7 @@ export default function ExpensesView() {
   const handleOpenEditModal = (t) => {
     setEditingTransaction(t);
     setFormType(t.type || 'expense');
+    setFormTripId(t.tripId ? String(t.tripId) : '');
     setFormTitle(t.title || '');
 
     const presetList =
@@ -504,6 +615,7 @@ export default function ExpensesView() {
     }
 
     const payload = {
+      tripId: formType === 'expense' && formTripId ? parseInt(formTripId, 10) : null,
       type: formType,
       title: formTitle.trim(),
       category: finalCategory,
@@ -530,6 +642,7 @@ export default function ExpensesView() {
       }
 
       setIsModalOpen(false);
+      fetchTrips();
     } catch (err) {
       console.error('Error saving transaction to backend:', err);
       // Local fallback
@@ -555,11 +668,64 @@ export default function ExpensesView() {
     try {
       await axios.delete(`${API_BASE}/${deleteTarget.id}`);
       setTransactions((prev) => prev.filter((t) => t.id !== deleteTarget.id));
+      fetchTrips();
     } catch (err) {
       console.warn('Backend delete failed, removing locally:', err);
       setTransactions((prev) => prev.filter((t) => t.id !== deleteTarget.id));
     } finally {
       setDeleteTarget(null);
+    }
+  };
+
+  // Save Trip (Create or Update)
+  const handleSaveTrip = async (tripData) => {
+    try {
+      let savedTrip = null;
+      if (editingTrip) {
+        const res = await axios.put(`${API_BASE}/trips/${editingTrip.id}`, tripData);
+        savedTrip = { ...editingTrip, ...res.data };
+        setTrips((prev) => prev.map((t) => (t.id === editingTrip.id ? savedTrip : t)));
+        setTransactions((prev) =>
+          prev.map((t) => (t.tripId === editingTrip.id ? { ...t, tripName: tripData.name, tripDestination: tripData.destination } : t))
+        );
+      } else {
+        const res = await axios.post(`${API_BASE}/trips`, tripData);
+        savedTrip = res.data;
+        setTrips((prev) => [savedTrip, ...prev.filter((t) => t.id !== savedTrip.id)]);
+        // Automatically select this trip for the expense form
+        setFormTripId(String(savedTrip.id));
+      }
+      fetchTrips();
+      return savedTrip;
+    } catch (err) {
+      console.error('Error saving trip:', err);
+      // Offline fallback
+      if (!editingTrip) {
+        const fallbackTrip = { id: Date.now(), ...tripData, totalSpent: 0, expenseCount: 0 };
+        setTrips((prev) => [fallbackTrip, ...prev]);
+        setFormTripId(String(fallbackTrip.id));
+        return fallbackTrip;
+      }
+    }
+  };
+
+  // Delete Trip
+  const handleConfirmDeleteTrip = async () => {
+    if (!deleteTripTarget) return;
+    try {
+      await axios.delete(`${API_BASE}/trips/${deleteTripTarget.id}`);
+      setTrips((prev) => prev.filter((t) => t.id !== deleteTripTarget.id));
+      setTransactions((prev) =>
+        prev.map((t) => (t.tripId === deleteTripTarget.id ? { ...t, tripId: null, tripName: null } : t))
+      );
+      if (selectedTripForDetails?.id === deleteTripTarget.id) {
+        setSelectedTripForDetails(null);
+      }
+    } catch (err) {
+      console.warn('Backend delete trip failed:', err);
+      setTrips((prev) => prev.filter((t) => t.id !== deleteTripTarget.id));
+    } finally {
+      setDeleteTripTarget(null);
     }
   };
 
@@ -599,41 +765,59 @@ export default function ExpensesView() {
               </div>
             </div>
 
-            {/* Top Action Buttons (Responsive 2x2 on Mobile, Flex on Desktop) */}
-            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
-              <button
-                onClick={() => exportExpensesToExcel(filteredTransactions, selectedMonth)}
-                className="py-2 px-2.5 sm:px-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] sm:text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm truncate"
-                title="Export Filtered Expenses & Cashflow to Excel"
-              >
-                <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="truncate">Export Excel</span>
-              </button>
+            {/* Top Action Buttons (Responsive Mobile Grid, Flex on Desktop) */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+              {/* Primary Actions Row (3-col on Mobile) */}
+              <div className="grid grid-cols-3 sm:flex sm:items-center gap-2">
+                <button
+                  onClick={() => handleOpenAddModal('expense')}
+                  className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate touch-manipulation"
+                >
+                  <ArrowDownLeft className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">+ Expense</span>
+                </button>
 
-              <button
-                onClick={() => setViewMode('analysis')}
-                className="py-2 px-2.5 sm:px-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-rose-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
-                title="Open Comprehensive Cashflow & Monthly Realized P&L Analytics"
-              >
-                <PieChart className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Analyze &gt;</span>
-              </button>
+                <button
+                  onClick={() => handleOpenAddModal('income')}
+                  className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-emerald-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate touch-manipulation"
+                >
+                  <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">+ Income</span>
+                </button>
 
-              <button
-                onClick={() => handleOpenAddModal('expense')}
-                className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-rose-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
-              >
-                <ArrowDownLeft className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Expense</span>
-              </button>
+                <button
+                  onClick={() => {
+                    setEditingTrip(null);
+                    setIsTripManageModalOpen(true);
+                  }}
+                  className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-indigo-600/25 transition active:scale-95 flex items-center justify-center gap-1 truncate touch-manipulation"
+                  title="Create a new Trip, Exam Round, or Outing"
+                >
+                  <Compass className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">+ Trip</span>
+                </button>
+              </div>
 
-              <button
-                onClick={() => handleOpenAddModal('income')}
-                className="py-2 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] sm:text-xs font-bold shadow-lg shadow-emerald-600/25 transition active:scale-95 flex items-center justify-center gap-1.5 truncate"
-              >
-                <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Income</span>
-              </button>
+              {/* Secondary Actions Row (2-col on Mobile) */}
+              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+                <button
+                  onClick={() => setViewMode('analysis')}
+                  className="py-2 px-2.5 sm:px-3.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-purple-500/50 text-[11px] sm:text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm truncate touch-manipulation"
+                  title="Open Comprehensive Cashflow & Monthly Realized P&L Analytics"
+                >
+                  <PieChart className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span className="truncate">Analyze &gt;</span>
+                </button>
+
+                <button
+                  onClick={() => exportExpensesToExcel(filteredTransactions, selectedMonth)}
+                  className="py-2 px-2.5 sm:px-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-emerald-500/50 text-[11px] sm:text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm truncate touch-manipulation"
+                  title="Export Filtered Expenses & Cashflow to Excel"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="truncate">Export Excel</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -957,7 +1141,128 @@ export default function ExpensesView() {
         </div>
       </div>
 
-      {/* 3. Search & Mobile Segmented View Switcher */}
+      {/* 3. Active Trips & Outings Strip (Prominently visible when trips exist) */}
+      {activeTripsList.length > 0 && (
+        <div className="bg-slate-900/90 border border-indigo-500/25 rounded-2xl p-3 sm:p-4 shadow-xl space-y-3">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="p-1.5 rounded-xl bg-gradient-to-tr from-indigo-600 to-emerald-500 text-white shadow-md shadow-indigo-600/20 shrink-0">
+                <Compass className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight">
+                    Active Trips & Outings
+                  </h3>
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">
+                    {activeTripsList.length} active
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 truncate hidden sm:block">
+                  One-day exam trips, outings, travel rounds & total spending
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setEditingTrip(null);
+                setIsTripManageModalOpen(true);
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 hover:text-white border border-indigo-500/40 text-[10px] sm:text-xs font-bold transition flex items-center gap-1 shadow-sm shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5 text-emerald-400" />
+              <span>+ New Trip / Outing</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
+            {activeTripsList.map((t) => {
+              const tripTxs = transactions.filter((tx) => tx.tripId === t.id && (tx.type === 'expense' || !tx.type));
+              const tripSpend = tripTxs.reduce((acc, tx) => acc + (parseFloat(tx.amount) || 0), 0);
+
+              return (
+                <div
+                  key={t.id}
+                  className="p-3 rounded-xl bg-slate-950/80 border border-indigo-500/25 hover:border-indigo-500/50 transition-all flex flex-col justify-between space-y-2.5 group shadow-sm hover:shadow-indigo-500/10"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-xs sm:text-sm font-black text-white truncate max-w-[170px]">
+                          {t.name}
+                        </h4>
+                        <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shrink-0">
+                          Active
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono flex-wrap">
+                        {t.destination && (
+                          <span className="flex items-center gap-0.5 text-slate-300 font-medium">
+                            <MapPin className="w-2.5 h-2.5 text-rose-400 shrink-0" />
+                            <span className="truncate max-w-[100px]">{t.destination}</span>
+                          </span>
+                        )}
+                        {t.startDate && (
+                          <span className="flex items-center gap-0.5 text-slate-400">
+                            <Calendar className="w-2.5 h-2.5 text-indigo-400 shrink-0" />
+                            <span>{String(t.startDate).slice(0, 10)}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="text-xs sm:text-sm font-black font-mono text-rose-400">
+                        -{formatCurrency(tripSpend)}
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-mono block">
+                        {tripTxs.length} items
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-800/80">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAddModal('expense', t.id)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold transition flex items-center gap-1 border border-slate-700 active:scale-95"
+                    >
+                      <Plus className="w-3 h-3 text-emerald-400" />
+                      <span>Add Expense</span>
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTripForDetails(t)}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-300 hover:text-white text-[10px] font-bold transition flex items-center gap-0.5 border border-indigo-500/30 active:scale-95"
+                      >
+                        <span>Breakdown</span>
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingTrip(t);
+                          setIsTripManageModalOpen(true);
+                        }}
+                        className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                        title="Edit Trip"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 4. Search & Mobile Segmented View Switcher */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-slate-900/80 p-2.5 sm:p-3 rounded-2xl border border-slate-800">
         
         {/* Search Box */}
@@ -1082,16 +1387,37 @@ export default function ExpensesView() {
                   </button>
                 </div>
               ) : (
-                expenseList.map((item) => (
-                  <ExpenseItemCard
-                    key={item.id}
-                    item={item}
-                    formatCurrency={formatCurrency}
-                    formatDateTime={formatDateTime}
-                    onEdit={handleOpenEditModal}
-                    onDelete={setDeleteTarget}
-                  />
-                ))
+                displayExpenseItems.map((entry) => {
+                  if (entry.isTrip) {
+                    return (
+                      <TripExpenseCard
+                        key={entry.id}
+                        trip={entry.trip}
+                        tripExpenses={entry.expenses}
+                        periodSpent={entry.totalSpent}
+                        formatCurrency={formatCurrency}
+                        formatDateTime={formatDateTime}
+                        onOpenDetails={(t) => setSelectedTripForDetails(t)}
+                        onAddExpenseToTrip={(t) => handleOpenAddModal('expense', t.id)}
+                        onEditTrip={(t) => {
+                          setEditingTrip(t);
+                          setIsTripManageModalOpen(true);
+                        }}
+                        onDeleteTrip={(t) => setDeleteTripTarget(t)}
+                      />
+                    );
+                  }
+                  return (
+                    <ExpenseItemCard
+                      key={entry.id}
+                      item={entry.item}
+                      formatCurrency={formatCurrency}
+                      formatDateTime={formatDateTime}
+                      onEdit={handleOpenEditModal}
+                      onDelete={setDeleteTarget}
+                    />
+                  );
+                })
               )}
             </div>
           </div>
@@ -1254,6 +1580,41 @@ export default function ExpensesView() {
                   <span>Income (In)</span>
                 </button>
               </div>
+
+              {/* Trip Selector (Optional - when logging expense) */}
+              {formType === 'expense' && (
+                <div className="p-2.5 rounded-xl bg-indigo-950/30 border border-indigo-500/30 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] sm:text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                      <Compass className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Link to Trip / Vacation (Optional)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTrip(null);
+                        setIsTripManageModalOpen(true);
+                      }}
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold underline flex items-center gap-0.5"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>+ New Trip</span>
+                    </button>
+                  </div>
+                  <select
+                    value={formTripId}
+                    onChange={(e) => setFormTripId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 sm:py-2 bg-slate-950 border border-indigo-500/40 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-400 transition cursor-pointer font-medium"
+                  >
+                    <option value="" className="bg-slate-900">None / General Spending (Not a Trip)</option>
+                    {trips.map((t) => (
+                      <option key={t.id} value={t.id} className="bg-slate-900">
+                        🌴 {t.name} {t.destination ? `• ${t.destination}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Title / Description */}
               <div>
@@ -1437,6 +1798,87 @@ export default function ExpensesView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ================= TRIP DETAILS & ITEM BREAKDOWN MODAL (IPO-Style Inspector) ================= */}
+      {selectedTripForDetails && (
+        <TripDetailsModal
+          isOpen={!!selectedTripForDetails}
+          trip={selectedTripForDetails}
+          tripExpenses={transactions.filter(
+            (tx) => tx.tripId === selectedTripForDetails.id && (tx.type === 'expense' || !tx.type)
+          )}
+          formatCurrency={formatCurrency}
+          formatDateTime={formatDateTime}
+          onClose={() => setSelectedTripForDetails(null)}
+          onEditTrip={(t) => {
+            setEditingTrip(t);
+            setIsTripManageModalOpen(true);
+          }}
+          onAddExpenseToTrip={(t) => handleOpenAddModal('expense', t.id)}
+          onEditExpense={(tx) => handleOpenEditModal(tx)}
+          onDeleteExpense={(tx) => setDeleteTarget(tx)}
+        />
+      )}
+
+      {/* ================= TRIP CREATE / EDIT MODAL ================= */}
+      {isTripManageModalOpen && (
+        <TripManagementModal
+          isOpen={isTripManageModalOpen}
+          editingTrip={editingTrip}
+          onClose={() => {
+            setIsTripManageModalOpen(false);
+            setEditingTrip(null);
+          }}
+          onSaveTrip={handleSaveTrip}
+        />
+      )}
+
+      {/* ================= DELETE TRIP CONFIRM MODAL ================= */}
+      {deleteTripTarget && typeof document !== 'undefined' && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDeleteTripTarget(null);
+          }}
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-3 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, margin: 0 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-900 border border-rose-500/30 rounded-2xl max-w-xs w-full p-4 sm:p-5 shadow-2xl space-y-3 my-auto relative z-[100000]"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-sm font-bold text-white">Delete Trip?</h4>
+                <p className="text-[11px] text-slate-400 truncate">
+                  "{deleteTripTarget.name}"
+                </p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Trip expenses will remain in ledger as standalone entries.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setDeleteTripTarget(null)}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteTrip}
+                className="px-3.5 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 shadow-md shadow-rose-600/30 transition active:scale-95"
+              >
+                Delete Trip
+              </button>
+            </div>
           </div>
         </div>,
         document.body

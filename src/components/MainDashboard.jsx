@@ -421,12 +421,31 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[10px] sm:text-xs font-mono text-slate-400">
-              <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 truncate">
-                Trading: <strong className={tradingStats.netPl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{formatCurrency(tradingStats.netPl)}</strong>
-              </span>
-              <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 truncate">
-                Savings: <strong className={cashflowStats.netSavings >= 0 ? 'text-purple-300' : 'text-rose-400'}>{formatCurrency(cashflowStats.netSavings)}</strong>
-              </span>
+              <button
+                type="button"
+                onClick={() => onNavigateTab('trading')}
+                className="px-2 py-0.5 rounded-lg bg-slate-950 hover:bg-indigo-950/60 border border-slate-800 hover:border-indigo-500/50 transition active:scale-95 text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                title="Go to Trading Journal"
+              >
+                <span>Trading:</span>
+                <strong className={tradingStats.netPl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                  {formatCurrency(tradingStats.netPl)}
+                </strong>
+                <ChevronRight className="w-2.5 h-2.5 text-slate-500" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onNavigateTab('expenses')}
+                className="px-2 py-0.5 rounded-lg bg-slate-950 hover:bg-rose-950/60 border border-slate-800 hover:border-rose-500/50 transition active:scale-95 text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                title="Go to Expenses & Cashflow"
+              >
+                <span>Savings:</span>
+                <strong className={cashflowStats.netSavings >= 0 ? 'text-purple-300' : 'text-rose-400'}>
+                  {formatCurrency(cashflowStats.netSavings)}
+                </strong>
+                <ChevronRight className="w-2.5 h-2.5 text-slate-500" />
+              </button>
             </div>
           </div>
 
@@ -599,20 +618,32 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
           </div>
 
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
-            <div className="p-2 sm:p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-center sm:text-left">
-              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate block">Month Inflow</span>
+            <div
+              onClick={() => onNavigateTab('expenses')}
+              className="p-2 sm:p-3.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 border border-slate-800 hover:border-emerald-500/40 transition cursor-pointer text-center sm:text-left group"
+              title="Click to view Cashflow Inflow details"
+            >
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate block group-hover:text-emerald-300 transition">Month Inflow</span>
               <div className="text-xs sm:text-base md:text-lg font-bold font-mono text-emerald-400 mt-0.5 sm:mt-1 truncate">
                 +{formatCurrency(cashflowStats.monthIncome)}
               </div>
             </div>
-            <div className="p-2 sm:p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-center sm:text-left">
-              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate block">Month Outflow</span>
+            <div
+              onClick={() => onNavigateTab('expenses')}
+              className="p-2 sm:p-3.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 border border-slate-800 hover:border-rose-500/40 transition cursor-pointer text-center sm:text-left group"
+              title="Click to view Cashflow Outflow details"
+            >
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate block group-hover:text-rose-300 transition">Month Outflow</span>
               <div className="text-xs sm:text-base md:text-lg font-bold font-mono text-rose-400 mt-0.5 sm:mt-1 truncate">
                 -{formatCurrency(cashflowStats.monthExpense)}
               </div>
             </div>
-            <div className="p-2 sm:p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-center sm:text-left">
-              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate block">Savings Rate</span>
+            <div
+              onClick={() => onNavigateTab('expenses')}
+              className="p-2 sm:p-3.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 border border-slate-800 hover:border-cyan-500/40 transition cursor-pointer text-center sm:text-left group"
+              title="Click to view Savings details"
+            >
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate block group-hover:text-cyan-300 transition">Savings Rate</span>
               <div className="text-xs sm:text-base md:text-lg font-bold font-mono text-cyan-400 mt-0.5 sm:mt-1">
                 {cashflowStats.savingsRate}%
               </div>
