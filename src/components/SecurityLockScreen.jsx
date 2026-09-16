@@ -20,6 +20,17 @@ const PIN_LENGTH = 8;
 
 const DIAL_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
+// Subtle tactile haptic pulse on mobile devices
+const triggerHaptic = (duration = 10) => {
+  if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+    try {
+      window.navigator.vibrate(duration);
+    } catch {
+      // Ignore vibration error on unsupported platforms
+    }
+  }
+};
+
 export default function SecurityLockScreen({
   connectionState, // 'connecting' | 'connected' | 'error'
   sysStatus,
@@ -38,15 +49,17 @@ export default function SecurityLockScreen({
       setIsSuccess(true);
       setIsError(false);
       setErrorMessage('');
+      triggerHaptic(25);
 
       // Instant seamless transition into Wealth OS
       setTimeout(() => {
         onUnlock();
-      }, 40);
+      }, 50);
     } else {
       setIsError(true);
       setIsShake(true);
       setErrorMessage('Incorrect 8-digit passcode. Try again.');
+      triggerHaptic([40, 50, 40]);
 
       // Fast error reset
       setTimeout(() => setIsShake(false), 400);
@@ -59,6 +72,7 @@ export default function SecurityLockScreen({
   // Handle Digit Press (from Dial Pad or Physical Keyboard)
   const handleDigitPress = useCallback((digit) => {
     if (isSuccess) return;
+    triggerHaptic(8);
 
     setPin((prev) => {
       if (prev.length >= PIN_LENGTH) return prev;
@@ -77,6 +91,7 @@ export default function SecurityLockScreen({
   // Handle Backspace / Delete
   const handleDeletePress = useCallback(() => {
     if (isSuccess) return;
+    triggerHaptic(10);
     setPin((prev) => prev.slice(0, -1));
     setIsError(false);
     setErrorMessage('');
@@ -85,6 +100,7 @@ export default function SecurityLockScreen({
   // Handle Clear / Reset
   const handleClearPress = useCallback(() => {
     if (isSuccess) return;
+    triggerHaptic(12);
     setPin('');
     setIsError(false);
     setErrorMessage('');
@@ -112,7 +128,7 @@ export default function SecurityLockScreen({
   }, [isSuccess, handleDigitPress, handleDeletePress, handleClearPress]);
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-2.5 sm:p-4 bg-slate-950 text-slate-100 overflow-y-auto select-none font-sans">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 xs:p-4 sm:p-6 bg-slate-950 text-slate-100 overflow-y-auto select-none font-sans min-h-[100dvh]">
       {/* Ambient Cyberpunk Lighting */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.25),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute top-1/4 left-1/4 w-72 sm:w-96 h-72 sm:h-96 bg-indigo-600/10 rounded-full blur-[80px] sm:blur-[100px] pointer-events-none animate-pulse-glow" />
@@ -127,9 +143,9 @@ export default function SecurityLockScreen({
         }}
       />
 
-      {/* Main Lock Card */}
+      {/* Main Lock Card - Responsive full-width on mobile with max-w-[400px] */}
       <div
-        className={`relative z-10 max-w-xs sm:max-w-sm w-full p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl backdrop-blur-2xl transition-all duration-200 space-y-3 my-auto ${
+        className={`relative z-10 w-full max-w-[390px] sm:max-w-[420px] p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl backdrop-blur-2xl transition-all duration-200 space-y-3.5 sm:space-y-4 my-auto ${
           isShake ? 'animate-shake ring-2 ring-rose-500' : ''
         }`}
       >
@@ -156,7 +172,7 @@ export default function SecurityLockScreen({
                 }`}
               />
             </span>
-            <span className="text-[9px] sm:text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 truncate">
+            <span className="text-[10px] sm:text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400 truncate">
               {connectionState === 'connected'
                 ? 'DB Linked'
                 : connectionState === 'error'
@@ -165,22 +181,22 @@ export default function SecurityLockScreen({
             </span>
           </div>
 
-          <div className="flex items-center gap-1">
-            <div className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 shrink-0">
-              <Clock className="w-2.5 h-2.5 text-indigo-400" />
+          <div className="flex items-center gap-1.5">
+            <div className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 shrink-0">
+              <Clock className="w-3 h-3 text-indigo-400" />
               <span>30m</span>
             </div>
-            <div className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-300 border border-slate-700/60 flex items-center gap-1 shrink-0">
-              <Lock className="w-2.5 h-2.5 text-indigo-400" />
+            <div className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-300 border border-slate-700/60 flex items-center gap-1 shrink-0">
+              <Lock className="w-3 h-3 text-indigo-400" />
               <span>Lock</span>
             </div>
           </div>
         </div>
 
         {/* Brand Emblem */}
-        <div className="flex flex-col items-center justify-center text-center pt-0.5">
+        <div className="flex flex-col items-center justify-center text-center pt-1">
           <div
-            className={`p-2 sm:p-2.5 rounded-xl shadow-lg mb-1.5 transition-all duration-200 ${
+            className={`p-2.5 sm:p-3 rounded-2xl shadow-lg mb-2 transition-all duration-200 ${
               isSuccess
                 ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-emerald-500/30 scale-105'
                 : isError
@@ -189,27 +205,27 @@ export default function SecurityLockScreen({
             }`}
           >
             {isSuccess ? (
-              <Unlock className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-scaleIn" />
+              <Unlock className="w-5 h-5 sm:w-6 sm:h-6 text-white animate-scaleIn" />
             ) : isError ? (
-              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+              <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             ) : (
-              <KeyRound className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+              <KeyRound className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             )}
           </div>
 
-          <h2 className="text-sm sm:text-base font-black tracking-tight text-white flex items-center justify-center gap-1.5 font-mono">
+          <h2 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center justify-center gap-1.5 font-mono">
             <span>AntarYudh</span>
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold uppercase">
+            <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold uppercase">
               Wealth OS
             </span>
           </h2>
-          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-400 mt-0.5">
             Enter 8-digit passcode via dial pad
           </p>
         </div>
 
         {/* 8-Digit PIN Slots Container */}
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {/* 8-Digit Visual Slots (Flex with flex-1 to perfectly fit all phone widths) */}
           <div className="flex items-center justify-between gap-1 sm:gap-1.5 py-1 w-full">
             {Array.from({ length: PIN_LENGTH }).map((_, idx) => {
@@ -220,7 +236,7 @@ export default function SecurityLockScreen({
               return (
                 <div
                   key={idx}
-                  className={`flex-1 min-w-0 aspect-[4/5] max-w-[38px] rounded-lg sm:rounded-xl border flex items-center justify-center font-mono font-black text-xs sm:text-sm md:text-base transition-all duration-150 select-none ${
+                  className={`flex-1 min-w-0 max-w-[42px] h-10 sm:h-12 rounded-xl border flex items-center justify-center font-mono font-black text-sm sm:text-base transition-all duration-150 select-none ${
                     isSuccess
                       ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 ring-2 ring-emerald-500/30'
                       : isError
@@ -232,26 +248,34 @@ export default function SecurityLockScreen({
                       : 'bg-slate-950/80 border-slate-800 text-slate-600'
                   }`}
                 >
-                  {isFilled ? (showPin ? digit : '●') : '—'}
+                  {isFilled ? (
+                    showPin ? (
+                      digit
+                    ) : (
+                      <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-indigo-300 shadow-sm shadow-indigo-400/50 inline-block" />
+                    )
+                  ) : (
+                    <span className="text-slate-600 text-xs sm:text-sm">—</span>
+                  )}
                 </div>
               );
             })}
           </div>
 
           {/* Show / Hide Toggle & Error Banner */}
-          <div className="flex items-center justify-between min-h-[18px] px-0.5 text-[10px]">
+          <div className="flex items-center justify-between min-h-[20px] px-1 text-xs">
             {errorMessage ? (
-              <span className="text-rose-400 font-medium flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 shrink-0" />
+              <span className="text-rose-400 font-medium flex items-center gap-1 text-[11px] sm:text-xs">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 <span>{errorMessage}</span>
               </span>
             ) : isSuccess ? (
-              <span className="text-emerald-400 font-medium flex items-center gap-1 font-mono">
-                <CheckCircle2 className="w-3 h-3" />
+              <span className="text-emerald-400 font-medium flex items-center gap-1 font-mono text-[11px] sm:text-xs">
+                <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Unlocked!</span>
               </span>
             ) : (
-              <span className="text-slate-500 font-medium">
+              <span className="text-slate-400 font-medium text-[11px] sm:text-xs">
                 {pin.length > 0 ? `${pin.length} of ${PIN_LENGTH} entered` : 'Tap numbers below'}
               </span>
             )}
@@ -259,24 +283,24 @@ export default function SecurityLockScreen({
             <button
               type="button"
               onClick={() => setShowPin(!showPin)}
-              className="text-slate-400 hover:text-white transition flex items-center gap-0.5 text-[10px] font-mono cursor-pointer py-0.5 px-1 rounded hover:bg-slate-800 touch-manipulation"
+              className="text-slate-400 hover:text-white transition flex items-center gap-1 text-[11px] sm:text-xs font-mono cursor-pointer py-1 px-1.5 rounded-lg hover:bg-slate-800 touch-manipulation active:scale-95"
             >
-              {showPin ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              {showPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               <span>{showPin ? 'Hide' : 'Show'}</span>
             </button>
           </div>
         </div>
 
-        {/* IN-BUILT NUMERIC DIAL PAD (Fast, Zero-Lag, Clean Pure Numbers) */}
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 pt-1">
+        {/* IN-BUILT NUMERIC DIAL PAD (Fast, Zero-Lag, Clean Touch-Friendly Responsive Buttons) */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-2.5 pt-1">
           {DIAL_KEYS.map((digit) => (
             <button
               key={digit}
               type="button"
               onClick={() => handleDigitPress(digit)}
-              className="py-2.5 sm:py-3 rounded-xl bg-slate-800/90 hover:bg-indigo-600/30 active:bg-indigo-600/50 border border-slate-700/70 hover:border-indigo-500/50 text-white font-mono font-bold transition-all duration-75 active:scale-95 shadow-sm touch-manipulation flex items-center justify-center min-h-[44px] sm:min-h-[48px]"
+              className="py-3 sm:py-3.5 rounded-2xl bg-slate-800/80 hover:bg-indigo-600/30 active:bg-indigo-600/50 border border-slate-700/60 active:border-indigo-400 text-white font-mono transition-all duration-75 active:scale-95 shadow-sm touch-manipulation flex items-center justify-center min-h-[50px] xs:min-h-[54px] sm:min-h-[58px]"
             >
-              <span className="text-lg sm:text-xl font-black leading-none">{digit}</span>
+              <span className="text-xl sm:text-2xl font-black leading-none">{digit}</span>
             </button>
           ))}
 
@@ -284,36 +308,36 @@ export default function SecurityLockScreen({
           <button
             type="button"
             onClick={handleClearPress}
-            className="py-2.5 sm:py-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 active:bg-rose-950/40 border border-slate-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-300 font-mono font-bold transition-all duration-75 active:scale-95 touch-manipulation flex items-center justify-center gap-1 min-h-[44px] sm:min-h-[48px]"
+            className="py-3 sm:py-3.5 rounded-2xl bg-slate-800/40 hover:bg-slate-800 active:bg-rose-950/40 border border-slate-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-300 font-mono font-bold transition-all duration-75 active:scale-95 touch-manipulation flex items-center justify-center gap-1.5 min-h-[50px] xs:min-h-[54px] sm:min-h-[58px]"
             title="Clear all"
           >
             <RotateCcw className="w-4 h-4" />
-            <span className="text-[10px] font-sans">Clear</span>
+            <span className="text-xs font-semibold font-sans">Clear</span>
           </button>
 
           <button
             type="button"
             onClick={() => handleDigitPress('0')}
-            className="py-2.5 sm:py-3 rounded-xl bg-slate-800/90 hover:bg-indigo-600/30 active:bg-indigo-600/50 border border-slate-700/70 hover:border-indigo-500/50 text-white font-mono font-bold transition-all duration-75 active:scale-95 shadow-sm touch-manipulation flex items-center justify-center min-h-[44px] sm:min-h-[48px]"
+            className="py-3 sm:py-3.5 rounded-2xl bg-slate-800/80 hover:bg-indigo-600/30 active:bg-indigo-600/50 border border-slate-700/60 active:border-indigo-400 text-white font-mono transition-all duration-75 active:scale-95 shadow-sm touch-manipulation flex items-center justify-center min-h-[50px] xs:min-h-[54px] sm:min-h-[58px]"
           >
-            <span className="text-lg sm:text-xl font-black leading-none">0</span>
+            <span className="text-xl sm:text-2xl font-black leading-none">0</span>
           </button>
 
           <button
             type="button"
             onClick={handleDeletePress}
-            className="py-2.5 sm:py-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 active:bg-rose-950/40 border border-slate-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-300 font-mono font-bold transition-all duration-75 active:scale-95 touch-manipulation flex items-center justify-center gap-1 min-h-[44px] sm:min-h-[48px]"
+            className="py-3 sm:py-3.5 rounded-2xl bg-slate-800/40 hover:bg-slate-800 active:bg-rose-950/40 border border-slate-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-300 font-mono font-bold transition-all duration-75 active:scale-95 touch-manipulation flex items-center justify-center gap-1.5 min-h-[50px] xs:min-h-[54px] sm:min-h-[58px]"
             title="Delete last digit"
           >
             <Delete className="w-4 h-4" />
-            <span className="text-[10px] font-sans">Del</span>
+            <span className="text-xs font-semibold font-sans">Del</span>
           </button>
         </div>
 
         {/* Live Parallel Database Connection Bar at Bottom */}
-        <div className="p-2 rounded-xl bg-slate-950/90 border border-slate-800 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+        <div className="p-2.5 rounded-xl bg-slate-950/90 border border-slate-800/80 flex items-center justify-between text-[11px] sm:text-xs text-slate-400 font-mono">
           <div className="flex items-center gap-1.5 truncate">
-            <Database className="w-3 h-3 text-indigo-400 shrink-0" />
+            <Database className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
             <span className="truncate">
               DB: <strong className="text-slate-200">{sysStatus?.database || 'MySQL Cloud'}</strong>
             </span>
@@ -322,7 +346,7 @@ export default function SecurityLockScreen({
           <div className="flex items-center gap-1.5 shrink-0">
             {connectionState === 'connected' ? (
               <span className="text-emerald-400 font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-2.5 h-2.5" /> Ready
+                <CheckCircle2 className="w-3 h-3" /> Ready
               </span>
             ) : connectionState === 'error' ? (
               <button
@@ -330,11 +354,11 @@ export default function SecurityLockScreen({
                 onClick={onRetryConnection}
                 className="text-rose-400 hover:underline flex items-center gap-1 cursor-pointer font-bold touch-manipulation"
               >
-                <RefreshCw className="w-2.5 h-2.5 animate-spin" /> Retry Link
+                <RefreshCw className="w-3 h-3 animate-spin" /> Retry Link
               </button>
             ) : (
               <span className="text-cyan-400 flex items-center gap-1">
-                <RefreshCw className="w-2.5 h-2.5 animate-spin" /> Syncing...
+                <RefreshCw className="w-3 h-3 animate-spin" /> Syncing...
               </span>
             )}
           </div>
