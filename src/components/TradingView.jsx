@@ -9,14 +9,10 @@ import {
   Plus,
   Search,
   Filter,
-  Calendar,
   Layers,
-  Edit2,
   Trash2,
   RefreshCw,
   Clock,
-  ArrowUpRight,
-  Activity,
   BarChart2,
   FileSpreadsheet,
   CheckCircle2,
@@ -27,16 +23,17 @@ import {
   ChevronRight,
   ChevronLeft,
   ChevronDown,
-  SlidersHorizontal,
-  History,
-  Split,
-  PlusCircle,
-  MinusCircle,
-  Sparkles,
   Download,
   PieChart,
+  ArrowUpDown,
+  Activity,
   Receipt,
-  ArrowUpDown
+  Split,
+  Calendar,
+  PlusCircle,
+  MinusCircle,
+  History,
+  Edit2
 } from 'lucide-react';
 import TradingAnalysis from './TradingAnalysis';
 import cacheManager from '../utils/cacheManager';
@@ -1780,12 +1777,12 @@ export default function TradingView() {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 w-full sm:w-auto flex-wrap">
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 w-full md:w-auto overflow-x-auto no-scrollbar gap-1 flex-nowrap shrink-0">
             <button
               onClick={() => setActiveTab('all')}
               className={clsx(
-                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition text-center truncate',
+                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition text-center whitespace-nowrap shrink-0 flex-1 sm:flex-none',
                 activeTab === 'all' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
               )}
             >
@@ -1794,32 +1791,32 @@ export default function TradingView() {
             <button
               onClick={() => setActiveTab('stock')}
               className={clsx(
-                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 truncate',
+                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 whitespace-nowrap shrink-0 flex-1 sm:flex-none',
                 activeTab === 'stock' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-blue-300'
               )}
             >
               <TrendingUp className="w-3 h-3 shrink-0" />
-              <span className="truncate">Stocks ({stockTrades.length})</span>
+              <span>Stocks ({stockTrades.length})</span>
             </button>
             <button
               onClick={() => setActiveTab('intraday')}
               className={clsx(
-                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 truncate',
+                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 whitespace-nowrap shrink-0 flex-1 sm:flex-none',
                 activeTab === 'intraday' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-cyan-300'
               )}
             >
               <Zap className="w-3 h-3 shrink-0" />
-              <span className="truncate">Intraday ({intradayTrades.length})</span>
+              <span>Intraday ({intradayTrades.length})</span>
             </button>
             <button
               onClick={() => setActiveTab('mtf')}
               className={clsx(
-                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 truncate',
+                'py-1.5 px-2.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 whitespace-nowrap shrink-0 flex-1 sm:flex-none',
                 activeTab === 'mtf' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-purple-300'
               )}
             >
               <Layers className="w-3 h-3 shrink-0" />
-              <span className="truncate">MTF ({mtfTrades.length})</span>
+              <span>MTF ({mtfTrades.length})</span>
             </button>
           </div>
         </div>

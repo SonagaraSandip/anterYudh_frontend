@@ -6,14 +6,14 @@ import {
   BarChart2,
   CreditCard,
   FileText,
-  ShoppingBag,
   Clock,
-  Sparkles,
   ChevronRight,
-  Activity,
   FileSpreadsheet,
   Cloud,
-  BookOpen
+  BookOpen,
+  Sparkles,
+  Activity,
+  ShoppingBag
 } from 'lucide-react';
 import { calculateIpoMetrics } from '../utils/ipoCalculator';
 
@@ -48,9 +48,12 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
 
   // Fetch all live data in 1 single high-speed batch roundtrip
   useEffect(() => {
+    let isMounted = true;
+
     const fetchAllData = async () => {
       try {
         const res = await axios.get('/api/dashboard/summary');
+        if (!isMounted) return;
         if (res.data && res.data.success) {
           const { ipos: iposData, trades: tradesData, expenses: expData, notes: notesData, buyItems: buyData, backupStatus: bStatus } = res.data;
 
@@ -99,6 +102,7 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
           axios.get('/api/backup/status')
         ]);
 
+        if (!isMounted) return;
         if (ipoRes.status === 'fulfilled' && Array.isArray(ipoRes.value.data)) {
           setIpos(ipoRes.value.data);
           cacheManager.set('ipos_list', ipoRes.value.data, 120000);
@@ -128,6 +132,9 @@ export default function MainDashboard({ onNavigateTab, onOpenBackup }) {
     };
 
     fetchAllData();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Format Backup Time

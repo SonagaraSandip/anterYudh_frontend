@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Lock,
   KeyRound,
@@ -7,7 +7,6 @@ import {
   Eye,
   EyeOff,
   Database,
-  Shield,
   Clock,
   Unlock,
   AlertTriangle,
@@ -43,6 +42,19 @@ export default function SecurityLockScreen({
   const [errorMessage, setErrorMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [isShake, setIsShake] = useState(false);
+  const timerRefs = useRef([]);
+
+  const safeSetTimeout = useCallback((fn, delay) => {
+    const id = setTimeout(fn, delay);
+    timerRefs.current.push(id);
+    return id;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      timerRefs.current.forEach(clearTimeout);
+    };
+  }, []);
 
   const validatePin = useCallback((pinToValidate) => {
     if (pinToValidate === APP_MASTER_PASSWORD) {
@@ -52,7 +64,7 @@ export default function SecurityLockScreen({
       triggerHaptic(25);
 
       // Instant seamless transition into Wealth OS
-      setTimeout(() => {
+      safeSetTimeout(() => {
         onUnlock();
       }, 50);
     } else {
@@ -62,21 +74,21 @@ export default function SecurityLockScreen({
       triggerHaptic([40, 50, 40]);
 
       // Fast error reset
-      setTimeout(() => setIsShake(false), 400);
-      setTimeout(() => {
+      safeSetTimeout(() => setIsShake(false), 400);
+      safeSetTimeout(() => {
         setPin('');
       }, 250);
     }
-  }, [onUnlock]);
+  }, [onUnlock, safeSetTimeout]);
 
   // Handle Digit Press (from Dial Pad or Physical Keyboard)
-  const handleDigitPress = useCallback((digit) => {
+  const handleDigitPress = useCallback((digitStr) => {
     if (isSuccess) return;
-    triggerHaptic(8);
+    triggerHaptic(digitStr.length > 1 ? 14 : 8);
 
     setPin((prev) => {
       if (prev.length >= PIN_LENGTH) return prev;
-      const next = prev + digit;
+      const next = (prev + digitStr).slice(0, PIN_LENGTH);
       setIsError(false);
       setErrorMessage('');
 
@@ -128,7 +140,7 @@ export default function SecurityLockScreen({
   }, [isSuccess, handleDigitPress, handleDeletePress, handleClearPress]);
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 xs:p-4 sm:p-6 bg-slate-950 text-slate-100 overflow-y-auto select-none font-sans min-h-[100dvh]">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-2.5 xs:p-3 sm:p-6 bg-slate-950 text-slate-100 overflow-y-auto select-none font-sans min-h-[100dvh]">
       {/* Ambient Cyberpunk Lighting */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.25),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute top-1/4 left-1/4 w-72 sm:w-96 h-72 sm:h-96 bg-indigo-600/10 rounded-full blur-[80px] sm:blur-[100px] pointer-events-none animate-pulse-glow" />
@@ -145,7 +157,7 @@ export default function SecurityLockScreen({
 
       {/* Main Lock Card - Responsive full-width on mobile with max-w-[400px] */}
       <div
-        className={`relative z-10 w-full max-w-[390px] sm:max-w-[420px] p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl backdrop-blur-2xl transition-all duration-200 space-y-3.5 sm:space-y-4 my-auto ${
+        className={`relative z-10 w-full max-w-[360px] xs:max-w-[390px] sm:max-w-[420px] p-3.5 xs:p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl backdrop-blur-2xl transition-all duration-200 space-y-3 sm:space-y-4 my-auto ${
           isShake ? 'animate-shake ring-2 ring-rose-500' : ''
         }`}
       >
@@ -227,7 +239,7 @@ export default function SecurityLockScreen({
         {/* 8-Digit PIN Slots Container */}
         <div className="space-y-2">
           {/* 8-Digit Visual Slots (Flex with flex-1 to perfectly fit all phone widths) */}
-          <div className="flex items-center justify-between gap-1 sm:gap-1.5 py-1 w-full">
+          <div className="flex items-center justify-between gap-1 xs:gap-1.5 py-1 w-full">
             {Array.from({ length: PIN_LENGTH }).map((_, idx) => {
               const isFilled = idx < pin.length;
               const isCurrent = idx === pin.length;
@@ -236,7 +248,7 @@ export default function SecurityLockScreen({
               return (
                 <div
                   key={idx}
-                  className={`flex-1 min-w-0 max-w-[42px] h-10 sm:h-12 rounded-xl border flex items-center justify-center font-mono font-black text-sm sm:text-base transition-all duration-150 select-none ${
+                  className={`flex-1 min-w-0 max-w-[38px] xs:max-w-[42px] h-9 xs:h-10 sm:h-12 rounded-lg sm:rounded-xl border flex items-center justify-center font-mono font-black text-xs xs:text-sm sm:text-base transition-all duration-150 select-none ${
                     isSuccess
                       ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 ring-2 ring-emerald-500/30'
                       : isError
@@ -252,7 +264,7 @@ export default function SecurityLockScreen({
                     showPin ? (
                       digit
                     ) : (
-                      <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-indigo-300 shadow-sm shadow-indigo-400/50 inline-block" />
+                      <span className="w-2 xs:w-2.5 sm:w-3 h-2 xs:h-2.5 sm:h-3 rounded-full bg-indigo-300 shadow-sm shadow-indigo-400/50 inline-block" />
                     )
                   ) : (
                     <span className="text-slate-600 text-xs sm:text-sm">—</span>
@@ -262,8 +274,8 @@ export default function SecurityLockScreen({
             })}
           </div>
 
-          {/* Show / Hide Toggle & Error Banner */}
-          <div className="flex items-center justify-between min-h-[20px] px-1 text-xs">
+          {/* Show / Hide Toggle & Error Banner & Clear Action */}
+          <div className="flex items-center justify-between min-h-[22px] px-1 text-xs">
             {errorMessage ? (
               <span className="text-rose-400 font-medium flex items-center gap-1 text-[11px] sm:text-xs">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -280,45 +292,63 @@ export default function SecurityLockScreen({
               </span>
             )}
 
-            <button
-              type="button"
-              onClick={() => setShowPin(!showPin)}
-              className="text-slate-400 hover:text-white transition flex items-center gap-1 text-[11px] sm:text-xs font-mono cursor-pointer py-1 px-1.5 rounded-lg hover:bg-slate-800 touch-manipulation active:scale-95"
-            >
-              {showPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              <span>{showPin ? 'Hide' : 'Show'}</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              {pin.length > 0 && !isSuccess && (
+                <button
+                  type="button"
+                  onClick={handleClearPress}
+                  className="text-slate-400 hover:text-rose-300 transition flex items-center gap-1 text-[10px] sm:text-[11px] font-mono cursor-pointer py-0.5 px-1.5 rounded-md hover:bg-rose-950/40 border border-transparent hover:border-rose-500/30 touch-manipulation active:scale-95"
+                  title="Clear all digits"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Clear</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowPin(!showPin)}
+                className="text-slate-400 hover:text-white transition flex items-center gap-1 text-[10px] sm:text-[11px] font-mono cursor-pointer py-0.5 px-1.5 rounded-md hover:bg-slate-800 touch-manipulation active:scale-95"
+              >
+                {showPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                <span>{showPin ? 'Hide' : 'Show'}</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* IN-BUILT NUMERIC DIAL PAD (Fast, Zero-Lag, Clean Touch-Friendly Responsive Buttons) */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-2.5 pt-1">
+        {/* IN-BUILT NUMERIC DIAL PAD (Fast, Zero-Lag, Clean Touch-Friendly Responsive Buttons with 000) */}
+        <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-2.5 pt-1">
           {DIAL_KEYS.map((digit) => (
             <button
               key={digit}
               type="button"
               onClick={() => handleDigitPress(digit)}
-              className="py-3 sm:py-3.5 rounded-2xl bg-slate-800/80 hover:bg-indigo-600/30 active:bg-indigo-600/50 border border-slate-700/60 active:border-indigo-400 text-white font-mono transition-all duration-75 active:scale-95 shadow-sm touch-manipulation flex items-center justify-center min-h-[50px] xs:min-h-[54px] sm:min-h-[58px]"
+              className="py-2.5 xs:py-3 sm:py-3.5 rounded-xl sm:rounded-2xl bg-slate-800/80 hover:bg-indigo-600/30 active:bg-indigo-600/50 border border-slate-700/60 active:border-indigo-400 text-white font-mono transition-all duration-75 active:scale-95 shadow-sm touch-manipulation flex items-center justify-center min-h-[46px] xs:min-h-[52px] sm:min-h-[58px]"
             >
               <span className="text-xl sm:text-2xl font-black leading-none">{digit}</span>
             </button>
           ))}
 
-          {/* Bottom Row: Clear / 0 / Backspace */}
+          {/* Bottom Row: 000 (Triple Zero) / 0 / Backspace (Del) */}
           <button
             type="button"
-            onClick={handleClearPress}
-            className="py-3 sm:py-3.5 rounded-2xl bg-slate-800/40 hover:bg-slate-800 active:bg-rose-950/40 border border-slate-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-300 font-mono font-bold transition-all duration-75 active:scale-95 touch-manipulation flex items-center justify-center gap-1.5 min-h-[50px] xs:min-h-[54px] sm:min-h-[58px]"
-            title="Clear all"
+            onClick={() => handleDigitPress('000')}
+            className="py-2 xs:py-2.5 sm:py-3 rounded-xl sm:rounded-2xl bg-cyan-950/30 hover:bg-cyan-900/40 active:bg-cyan-600/30 border border-cyan-700/50 active:border-cyan-400 text-cyan-300 hover:text-white font-mono transition-all duration-75 active:scale-95 shadow-sm touch-manipulation flex flex-col items-center justify-center min-h-[46px] xs:min-h-[52px] sm:min-h-[58px] group"
+            title="Add 000 (Triple Zero)"
           >
-            <RotateCcw className="w-4 h-4" />
-            <span className="text-xs font-semibold font-sans">Clear</span>
+            <span className="text-lg xs:text-xl sm:text-2xl font-black leading-none tracking-tight text-cyan-300 group-hover:text-cyan-200">
+              000
+            </span>
+            <span className="text-[8px] xs:text-[9px] font-sans font-bold uppercase tracking-wider text-cyan-400/80 mt-0.5">
+              Triple 0
+            </span>
           </button>
 
           <button
             type="button"
             onClick={() => handleDigitPress('0')}
-            className="py-3 sm:py-3.5 rounded-2xl bg-slate-800/80 hover:bg-indigo-600/30 active:bg-indigo-600/50 border border-slate-700/60 active:border-indigo-400 text-white font-mono transition-all duration-75 active:scale-95 shadow-sm touch-manipulation flex items-center justify-center min-h-[50px] xs:min-h-[54px] sm:min-h-[58px]"
+            className="py-2.5 xs:py-3 sm:py-3.5 rounded-xl sm:rounded-2xl bg-slate-800/80 hover:bg-indigo-600/30 active:bg-indigo-600/50 border border-slate-700/60 active:border-indigo-400 text-white font-mono transition-all duration-75 active:scale-95 shadow-sm touch-manipulation flex items-center justify-center min-h-[46px] xs:min-h-[52px] sm:min-h-[58px]"
           >
             <span className="text-xl sm:text-2xl font-black leading-none">0</span>
           </button>
@@ -326,7 +356,7 @@ export default function SecurityLockScreen({
           <button
             type="button"
             onClick={handleDeletePress}
-            className="py-3 sm:py-3.5 rounded-2xl bg-slate-800/40 hover:bg-slate-800 active:bg-rose-950/40 border border-slate-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-300 font-mono font-bold transition-all duration-75 active:scale-95 touch-manipulation flex items-center justify-center gap-1.5 min-h-[50px] xs:min-h-[54px] sm:min-h-[58px]"
+            className="py-2.5 xs:py-3 sm:py-3.5 rounded-xl sm:rounded-2xl bg-slate-800/40 hover:bg-slate-800 active:bg-rose-950/40 border border-slate-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-300 font-mono font-bold transition-all duration-75 active:scale-95 touch-manipulation flex items-center justify-center gap-1 min-h-[46px] xs:min-h-[52px] sm:min-h-[58px]"
             title="Delete last digit"
           >
             <Delete className="w-4 h-4" />

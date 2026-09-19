@@ -3,26 +3,24 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import cacheManager from '../utils/cacheManager';
 import {
-  Sparkles,
   BookOpen,
   GraduationCap,
   Plus,
   Search,
   CheckCircle2,
   Clock,
-  Calendar,
   Star,
   ExternalLink,
-  Edit2,
   Trash2,
   X,
   Filter,
-  Check,
   Award,
-  Zap,
-  Layers,
   BookMarked,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  Layers,
+  Calendar,
+  Edit2
 } from 'lucide-react';
 
 const SKILL_CATEGORIES = [

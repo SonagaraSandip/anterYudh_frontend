@@ -11,21 +11,20 @@ import {
   Filter,
   CheckCircle2,
   Trash2,
-  Edit2,
   FileSpreadsheet,
   X,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
   ChevronUp,
-  Users,
   Download,
   ArrowUpDown,
   RefreshCw,
   AlertCircle,
   AlertTriangle,
-  Layers,
-  Smartphone
+  Smartphone,
+  Percent,
+  Users
 } from 'lucide-react';
 import { exportIposToExcel } from '../utils/excelExporter';
 import { IpoDesktopRow } from './ipo/IpoDesktopRow';
@@ -77,12 +76,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
   const [errorMsg, setErrorMsg] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [pageSize, setPageSize] = useState(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      return 5; // Mobile default max 4 entries
-    }
-    return 10; // Web default max 10 entries
-  });
+  const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
   // Mobile accordion / collapsible dropdown state for IPO cards
@@ -857,7 +851,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
   };
 
   return (
-    <div className={isEmbedded ? "space-y-4 sm:space-y-6 animate-fadeIn font-sans" : "min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans"}>
+    <div className={isEmbedded ? "space-y-4 sm:space-y-6 animate-fadeIn font-sans w-full min-w-0" : "min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans w-full min-w-0"}>
       {/* IPO Sub-Header & Controls with Vibrant Accents */}
       <div className="bg-gradient-to-r from-slate-900 via-cyan-950/20 to-slate-900 border border-cyan-500/20 rounded-2xl p-4 sm:p-5 shadow-xl">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
@@ -930,7 +924,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
       </div>
 
       {/* Main Content Area */}
-      <div className="space-y-4 sm:space-y-6">
+      <div className="space-y-4 sm:space-y-6 w-full min-w-0">
         {/* Alert / Offline message */}
         {errorMsg && (
           <div className="flex items-center gap-3 px-3 sm:px-4 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-xs">
@@ -998,55 +992,46 @@ export default function IpoDashboard({ isEmbedded = false }) {
                   )}
                 </div>
               </div>
-              <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight ${
-                stats.overallProfitPercent !== null
-                  ? parseFloat(stats.overallProfitPercent) >= 0
-                    ? 'text-emerald-400'
-                    : 'text-rose-400'
-                  : 'text-slate-300'
-              }`}>
+              <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-white">
                 {stats.overallProfitPercent !== null ? (
-                  <>
-                    {parseFloat(stats.overallProfitPercent) > 0 ? '+' : ''}
-                    {stats.overallProfitPercent}%
-                  </>
+                  <span className={parseFloat(stats.overallProfitPercent) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                    {parseFloat(stats.overallProfitPercent) > 0 ? '+' : ''}{stats.overallProfitPercent}%
+                  </span>
                 ) : (
-                  '0.0%'
+                  <span className="text-slate-500 text-lg">0.0%</span>
                 )}
               </div>
-              <span className="text-[10px] sm:text-[11px] text-slate-500">
-                {stats.totalInvestedCost > 0
-                  ? `On ${formatCurrency(stats.totalInvestedCost)} capital`
-                  : 'Based on Lot Cost'}
-              </span>
+              <div className="text-[10px] sm:text-[11px] text-slate-500 mt-1">Return on invested capital</div>
             </div>
 
             <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm relative overflow-hidden group hover:border-slate-700 transition">
               <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1">
-                <span>Allotment Rate</span>
-                <div className="p-1 sm:p-1.5 rounded-lg bg-violet-500/10 text-violet-400">
+                <span>Allotments & Applications</span>
+                <div className="p-1 sm:p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
                   <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
               </div>
-              <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-violet-400">
-                {stats.allotmentRate}%
+              <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-white">
+                <span className="text-emerald-400">{stats.totalAllottedCount}</span>
+                <span className="text-slate-600 text-base font-normal mx-1.5">/</span>
+                <span className="text-indigo-400">{stats.totalAppliedCount}</span>
               </div>
-              <span className="text-[10px] sm:text-[11px] text-slate-500">
-                {stats.totalAllottedCount} allotted / {stats.totalAppliedCount} applied
-              </span>
+              <div className="text-[10px] sm:text-[11px] text-slate-500 mt-1">
+                Allotted vs Applied Demats
+              </div>
             </div>
 
             <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm relative overflow-hidden group hover:border-slate-700 transition">
               <div className="flex items-center justify-between text-slate-400 text-[11px] sm:text-xs font-medium mb-1">
-                <span>IPOs / Demats</span>
-                <div className="p-1 sm:p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
-                  <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Allotment Rate (Strike)</span>
+                <div className="p-1 sm:p-1.5 rounded-lg bg-purple-500/10 text-purple-400">
+                  <Percent className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
               </div>
-              <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-white">
-                {ipos.length} <span className="text-xs sm:text-sm font-normal text-slate-400">IPOs / {persons.length} Demats</span>
+              <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-purple-400">
+                {stats.allotmentRate}%
               </div>
-              <span className="text-[10px] sm:text-[11px] text-slate-500">Synced to Database</span>
+              <div className="text-[10px] sm:text-[11px] text-slate-500 mt-1">Success probability</div>
             </div>
           </div>
         )}
@@ -1087,7 +1072,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
               </select>
             </div>
 
-            {/* Page Size Filter (Default 10 on web, 4 on mobile, with 20, 30, 50 options) */}
+            {/* Page Size Filter (Default 10 per page, with 20, 30, 50, 100 options) */}
             <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800">
               <span>Show:</span>
               <select
@@ -1095,51 +1080,15 @@ export default function IpoDashboard({ isEmbedded = false }) {
                 onChange={(e) => setPageSize(Number(e.target.value))}
                 className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer font-medium"
               >
-                <option value={5} className="bg-slate-900">5 / page (Mobile)</option>
-                <option value={10} className="bg-slate-900">10 / page (Web)</option>
+                <option value={10} className="bg-slate-900">10 / page (Default)</option>
                 <option value={20} className="bg-slate-900">20 / page</option>
                 <option value={30} className="bg-slate-900">30 / page</option>
                 <option value={50} className="bg-slate-900">50 / page</option>
+                <option value={100} className="bg-slate-900">100 / page</option>
               </select>
             </div>
           </div>
         </div>
-
-        {/* Registered Demat Accounts Pills Bar (Quick View & Delete) */}
-        {/* {persons.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1 px-1 text-xs scrollbar-none flex-wrap bg-slate-900/40 p-2 rounded-xl border border-slate-800/80">
-            <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0 mr-1">
-              <Users className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Demat Accounts ({persons.length}):</span>
-            </span>
-            {persons.map((p) => (
-              <span
-                key={p}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 text-xs font-medium hover:border-slate-700 transition group/tag shadow-sm"
-              >
-                <span className="truncate max-w-[120px]">{p}</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePromptDeletePerson(p);
-                  }}
-                  className="text-slate-500 hover:text-rose-400 transition p-0.5 rounded hover:bg-rose-500/10 active:scale-90"
-                  title={`Remove ${p} account`}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-            <button
-              onClick={() => setIsAddPersonOpen(true)}
-              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 hover:bg-cyan-900/40 border border-cyan-500/30 rounded-lg transition"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Add</span>
-            </button>
-          </div>
-        )} */}
 
         {/* Dynamic Column Alert if no persons added yet */}
         {persons.length === 0 && (
@@ -1277,14 +1226,14 @@ export default function IpoDashboard({ isEmbedded = false }) {
           </div>
 
         {/* 2. Spreadsheet Table Container (Dedicated Web / Desktop View) */}
-        <div className="hidden md:flex bg-slate-900/90 border border-slate-800 rounded-xl shadow-xl overflow-hidden flex-col">
-          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900">
-              <table className="w-full text-left border-collapse text-xs min-w-[750px]">
+        <div className="hidden md:flex bg-slate-900/90 border border-slate-800 rounded-xl shadow-xl overflow-hidden flex-col w-full min-w-0">
+          <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900">
+              <table className="w-full text-left border-collapse text-xs min-w-[700px]">
                 {/* Table Header */}
                 <thead>
                   <tr className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider text-[10px] sm:text-[11px]">
                     {/* Left Column: IPO Details & Lot Cost (Spacious Width) */}
-                    <th className="py-3 px-3 sm:px-4 sticky left-0 z-20 bg-slate-950 min-w-[220px] sm:min-w-[260px] border-r border-slate-800/80 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
+                    <th className="py-3 px-3 sm:px-4 sticky left-0 z-20 bg-slate-950 min-w-[190px] lg:min-w-[220px] border-r border-slate-800/80 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
                       IPO Details & Lot Size
                     </th>
 
@@ -1292,7 +1241,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
                     {persons.map((person) => (
                       <th
                         key={person}
-                        className="py-2.5 px-2 min-w-[150px] max-w-[180px] border-r border-slate-800/80 bg-slate-950 text-center relative group/th"
+                        className="py-2.5 px-2 min-w-[125px] sm:min-w-[135px] max-w-[160px] border-r border-slate-800/80 bg-slate-950 text-center relative group/th"
                       >
                         <div className="flex items-center justify-center gap-1.5 mb-0.5">
                           <span className="text-slate-200 font-medium truncate max-w-[110px]" title={person}>
@@ -1319,7 +1268,7 @@ export default function IpoDashboard({ isEmbedded = false }) {
 
 
                     {/* Right Column: Profit / Loss & Percentage */}
-                    <th className="py-3 px-3 sm:px-4 min-w-[140px] text-right bg-slate-950 sticky right-0 z-20 border-l border-slate-800 shadow-[-2px_0_5px_rgba(0,0,0,0.3)]">
+                    <th className="py-3 px-3 sm:px-4 min-w-[110px] sm:min-w-[130px] text-right bg-slate-950 sticky right-0 z-20 border-l border-slate-800 shadow-[-2px_0_5px_rgba(0,0,0,0.3)]">
                       P&L & Return
                     </th>
                     <th className="py-3 px-1.5 w-8 min-w-[32px] text-center bg-slate-950">

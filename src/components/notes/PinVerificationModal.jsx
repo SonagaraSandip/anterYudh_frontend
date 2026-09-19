@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import {
@@ -41,6 +41,27 @@ export function PinVerificationModal({
   const [isSuccessAnim, setIsSuccessAnim] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  const timerRefs = useRef([]);
+  const safeSetTimeout = useCallback((fn, delay) => {
+    const id = setTimeout(fn, delay);
+    timerRefs.current.push(id);
+    return id;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      timerRefs.current.forEach(clearTimeout);
+    };
+  }, []);
+
+  // Reset input state whenever modal opens or targetNoteTitle changes so it is always clean and empty
+  useEffect(() => {
+    setPin('');
+    setIsSuccessAnim(false);
+    setErrorMsg('');
+    setIsShake(false);
+  }, [isOpen, targetNoteTitle]);
+
   // Lock body scroll when modal is open to prevent background scrolling
   useEffect(() => {
     if (isOpen) {
@@ -82,6 +103,14 @@ export function PinVerificationModal({
     return () => clearInterval(interval);
   }, [isOpen, lockoutUntil]);
 
+  const handleModalClose = useCallback(() => {
+    setPin('');
+    setIsSuccessAnim(false);
+    setErrorMsg('');
+    setIsShake(false);
+    onClose();
+  }, [onClose]);
+
   const handleVerify = useCallback((enteredPin) => {
     if (lockoutUntil && Date.now() < lockoutUntil) {
       return;
@@ -96,9 +125,13 @@ export function PinVerificationModal({
       localStorage.removeItem('antaryudh_secret_pin_attempts');
       localStorage.removeItem('antaryudh_secret_pin_lockout');
 
-      setTimeout(() => {
+      safeSetTimeout(() => {
         onSuccess();
         onClose();
+        setPin('');
+        setIsSuccessAnim(false);
+        setErrorMsg('');
+        setIsShake(false);
       }, 80);
     } else {
       // WRONG PIN
@@ -107,8 +140,8 @@ export function PinVerificationModal({
       localStorage.setItem('antaryudh_secret_pin_attempts', String(newAttempts));
 
       setIsShake(true);
-      setTimeout(() => setIsShake(false), 400);
-      setTimeout(() => setPin(''), 250);
+      safeSetTimeout(() => setIsShake(false), 400);
+      safeSetTimeout(() => setPin(''), 250);
 
       if (newAttempts >= MAX_ATTEMPTS) {
         const lockTime = Date.now() + LOCKOUT_DURATION_MS;
@@ -121,7 +154,7 @@ export function PinVerificationModal({
         setErrorMsg('Incorrect PIN. Please try again.');
       }
     }
-  }, [attempts, lockoutUntil, onSuccess, onClose]);
+  }, [attempts, lockoutUntil, onSuccess, onClose, safeSetTimeout]);
 
   // Handle Digit Press
   const handleDigitPress = useCallback((digit) => {
@@ -162,7 +195,7 @@ export function PinVerificationModal({
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        onClose();
+        handleModalClose();
       } else if (e.key >= '0' && e.key <= '9') {
         e.preventDefault();
         handleDigitPress(e.key);
@@ -174,7 +207,7 @@ export function PinVerificationModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, handleDigitPress, handleDeletePress]);
+  }, [isOpen, handleModalClose, handleDigitPress, handleDeletePress]);
 
   if (!isOpen) return null;
 
@@ -185,7 +218,7 @@ export function PinVerificationModal({
     <div
       onClick={(e) => {
         if (e.target === e.currentTarget) {
-          onClose();
+          handleModalClose();
         }
       }}
       className="fixed inset-0 w-screen h-screen z-[999999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md select-none overflow-y-auto"
@@ -200,7 +233,7 @@ export function PinVerificationModal({
         {/* Close Button */}
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleModalClose}
           className="absolute top-3 right-3 p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition active:scale-90 touch-manipulation"
           title="Close (Esc)"
         >

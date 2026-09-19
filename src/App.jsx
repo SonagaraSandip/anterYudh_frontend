@@ -394,26 +394,26 @@ function App() {
         />
       )}
 
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white w-full max-w-full overflow-x-hidden">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-30 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
-        <div className="max-w-[1600px] mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 w-full">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2">
           
           {/* Logo & Brand */}
-          <div className="flex items-center gap-2 sm:gap-3 cursor-pointer" onClick={() => handleSelectTab('dashboard')}>
-            <div className="p-1.5 sm:p-2 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-500 shadow-md shadow-indigo-500/20 text-white">
+          <div className="flex items-center gap-2 sm:gap-3 cursor-pointer shrink-0" onClick={() => handleSelectTab('dashboard')}>
+            <div className="p-1.5 sm:p-2 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-500 shadow-md shadow-indigo-500/20 text-white shrink-0">
               <Shield className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-black text-sm sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+                <span className="font-black text-sm sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent whitespace-nowrap">
                   AntarYudh
                 </span>
-                <span className="text-[9px] sm:text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold uppercase">
+                <span className="hidden sm:inline-block text-[9px] sm:text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold uppercase whitespace-nowrap">
                   Wealth OS
                 </span>
               </div>
-              <span className="text-[9px] sm:text-[10px] text-slate-400 tracking-wider hidden sm:block">
+              <span className="text-[9px] sm:text-[10px] text-slate-400 tracking-wider hidden sm:block truncate">
                 Unified Finance • Trading • Cashflow • Vault
               </span>
             </div>
@@ -443,7 +443,7 @@ function App() {
           </nav>
 
           {/* Right Header Status Bar & Quick Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Live Database Sync Indicator */}
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] font-mono shadow-sm">
               <span className="relative flex h-2 w-2">
@@ -459,27 +459,27 @@ function App() {
             {/* Cloud Backup Modal Quick Trigger Button */}
             <button
               onClick={() => setIsBackupModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-bold font-mono transition active:scale-95 shadow-sm shadow-indigo-500/10 cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-bold font-mono transition active:scale-95 shadow-sm shadow-indigo-500/10 cursor-pointer whitespace-nowrap shrink-0"
               title="Open Database Backup & Cloud Sync Manager"
             >
-              <Cloud className="w-3.5 h-3.5 text-indigo-400" />
+              <Cloud className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
               <span>Backup</span>
             </button>
 
             {/* Master App Lock Button */}
             <button
               onClick={handleLockApp}
-              className="flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-rose-300 border border-slate-700/60 text-xs font-bold font-mono transition active:scale-95 shadow-sm cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-rose-300 border border-slate-700/60 text-xs font-bold font-mono transition active:scale-95 shadow-sm cursor-pointer shrink-0"
               title="Lock Wealth OS"
             >
-              <Lock className="w-3.5 h-3.5 text-rose-400" />
+              <Lock className="w-3.5 h-3.5 text-rose-400 shrink-0" />
               <span className="hidden sm:inline">Lock</span>
             </button>
 
             {/* Mobile Hamburger Menu Toggle */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition cursor-pointer"
+              className="md:hidden p-1.5 sm:p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition cursor-pointer shrink-0"
               aria-label="Toggle navigation menu"
             >
               {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -489,7 +489,7 @@ function App() {
       </header>
 
       {/* Main Tab Content View Container (Lazy Loaded with Suspense for Maximum Speed) */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-6">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-6 min-w-0 overflow-x-hidden">
         <ErrorBoundary key={activeTab} onReset={() => setActiveTab('dashboard')}>
           <Suspense fallback={<TabLoadingFallback />}>
             {activeTab === 'dashboard' && (
@@ -690,13 +690,13 @@ function App() {
         onClick={scrollToTop}
         aria-label="Scroll to top"
         title="Scroll to top"
-        className={`fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 p-3 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-500 text-white shadow-xl shadow-indigo-500/30 border border-white/20 hover:scale-110 active:scale-95 transition-all duration-300 flex items-center justify-center group ${
+        className={`fixed bottom-4 right-3 sm:bottom-6 sm:right-6 z-40 p-2 sm:p-3 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-500 text-white shadow-xl shadow-indigo-500/30 border border-white/20 hover:scale-110 active:scale-95 transition-all duration-300 flex items-center justify-center group ${
           showScrollTop
             ? 'opacity-100 translate-y-0 pointer-events-auto'
             : 'opacity-0 translate-y-6 pointer-events-none'
         }`}
       >
-        <ArrowUp className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform duration-200" />
+        <ArrowUp className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-y-0.5 transition-transform duration-200" />
       </button>
     </div>
     </>

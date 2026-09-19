@@ -49,7 +49,7 @@ export const IpoDesktopRow = memo(function IpoDesktopRow({
       }`}
     >
       {/* 1. Left: IPO Name, Lot Cost & Notes */}
-      <td className="py-2.5 px-3 sm:px-4 font-medium text-slate-200 sticky left-0 z-10 bg-slate-900 group-hover:bg-slate-850 min-w-[220px] sm:min-w-[260px] border-r border-slate-800/80 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
+      <td className="py-2.5 px-3 sm:px-4 font-medium text-slate-200 sticky left-0 z-10 bg-slate-900 group-hover:bg-slate-850 min-w-[190px] lg:min-w-[220px] border-r border-slate-800/80 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
         <div className="flex items-center justify-between gap-2">
           <div
             className="font-semibold text-slate-100 text-xs sm:text-sm tracking-tight truncate max-w-[180px]"
@@ -148,7 +148,7 @@ export const IpoDesktopRow = memo(function IpoDesktopRow({
         return (
           <td
             key={person}
-            className={`py-1.5 px-2 min-w-[160px] max-w-[200px] border-r border-slate-800/80 align-middle transition-colors ${
+            className={`py-1.5 px-2 min-w-[125px] sm:min-w-[135px] max-w-[160px] border-r border-slate-800/80 align-middle transition-colors ${
               app.allotted ? 'bg-emerald-950/25' : app.applied ? 'bg-indigo-950/40' : ''
             }`}
           >
@@ -257,7 +257,7 @@ export const IpoDesktopRow = memo(function IpoDesktopRow({
       })}
 
       {/* 3. Right: Profit / Loss Badge & Percentage Return */}
-      <td className="py-2.5 px-3 sm:px-4 text-right sticky right-0 z-10 bg-slate-900 group-hover:bg-slate-850 min-w-[140px] border-l border-slate-800 shadow-[-2px_0_5px_rgba(0,0,0,0.3)]">
+      <td className="py-2.5 px-3 sm:px-4 text-right sticky right-0 z-10 bg-slate-900 group-hover:bg-slate-850 min-w-[110px] sm:min-w-[130px] border-l border-slate-800 shadow-[-2px_0_5px_rgba(0,0,0,0.3)]">
         {editingProfitLossId === ipo.id ? (
           <div className="flex items-center justify-end gap-1">
             <input

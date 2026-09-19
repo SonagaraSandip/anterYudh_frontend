@@ -12,8 +12,8 @@ import {
   Download,
   HardDrive,
   X,
-  FileArchive,
   Sparkles,
+  FileArchive,
   ShieldCheck
 } from 'lucide-react';
 
